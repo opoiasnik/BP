@@ -1,0 +1,89 @@
+.main-content {
+    text-align: center;
+    padding: 50px;
+    background-color: #e0f7fa; /* Светло-голубой фон */
+    border-radius: 10px;
+}
+
+h1 {
+    font-size: 3rem;
+    color: #0077b6; /* Темно-голубой заголовок */
+    margin-bottom: 20px;
+}
+
+p {
+    font-size: 1.5rem;
+    color: #005f73; /* Темно-синий для текста */
+    margin-bottom: 30px;
+}
+
+.try-chat-container {
+    margin-top: 30px;
+}
+
+.try-chat-btn {
+    background-color: #90e0ef;
+    color: #0077b6;
+    padding: 10px 30px;
+    border-radius: 50px;
+    font-size: 1.25rem;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+}
+
+.try-chat-btn .arrow {
+    margin-left: 10px;
+    transition: transform 0.3s ease;
+}
+
+.try-chat-btn:hover {
+    background-color: #0077b6;
+    color: white;
+}
+
+.try-chat-btn:hover .arrow {
+    transform: translateX(5px);
+}
+
+.smiley-container {
+    position: relative;
+    margin-top: 5%;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: yellow;
+    border-radius: 50%;
+    width: 160px;
+    height: 160px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+}
+
+.smiley {
+    width: 90%;
+    height: auto;
+}
+
+.eye {
+    position: absolute;
+    width: 15px;
+    height: 15px;
+    background-color: black;
+    border-radius: 50%;
+    transition: transform 0.1s ease-out;
+}
+
+.left-eye {
+    top: 40%;
+    left: 35%;
+}
+
+.right-eye {
+    top: 40%;
+    right: 35%;
+}
+
+
