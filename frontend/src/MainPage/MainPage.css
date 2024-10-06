@@ -1,50 +1,46 @@
+header {
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
 .main-content {
+    margin-top: 0;
     text-align: center;
     padding: 50px;
-    background-color: #e0f7fa; /* Светло-голубой фон */
+    background-color: #e0f7fa;
     border-radius: 10px;
 }
 
-h1 {
+.wave-text-container {
     font-size: 3rem;
-    color: #0077b6; /* Темно-голубой заголовок */
-    margin-bottom: 20px;
+    font-weight: bold;
+    color: #0077b6;
+    display: inline-block;
+    overflow: hidden;
 }
 
-p {
+.wave-text {
+    display: inline-block;
+    animation: none;
+}
+
+@keyframes wave {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-10px);
+    }
+}
+
+.intro-text {
     font-size: 1.5rem;
-    color: #005f73; /* Темно-синий для текста */
+    color: #005f73;
     margin-bottom: 30px;
 }
 
 .try-chat-container {
     margin-top: 30px;
-}
-
-.try-chat-btn {
-    background-color: #90e0ef;
-    color: #0077b6;
-    padding: 10px 30px;
-    border-radius: 50px;
-    font-size: 1.25rem;
-    text-decoration: none;
-    transition: all 0.3s ease;
-    display: inline-flex;
-    align-items: center;
-}
-
-.try-chat-btn .arrow {
-    margin-left: 10px;
-    transition: transform 0.3s ease;
-}
-
-.try-chat-btn:hover {
-    background-color: #0077b6;
-    color: white;
-}
-
-.try-chat-btn:hover .arrow {
-    transform: translateX(5px);
 }
 
 .smiley-container {
@@ -59,7 +55,6 @@ p {
     display: flex;
     justify-content: center;
     align-items: center;
-
 }
 
 .smiley {
@@ -85,5 +80,3 @@ p {
     top: 40%;
     right: 35%;
 }
-
-

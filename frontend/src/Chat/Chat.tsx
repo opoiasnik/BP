@@ -1,11 +1,11 @@
 // @ts-ignore
 import React, { useState } from 'react';
 import axios from 'axios';
-import { Box, Button, Container, Grid, Paper, TextField, Typography, List, ListItem, Divider } from '@mui/material';
 import { motion } from 'framer-motion';
 import Message from '../Message/Message';
-import InputField from '../InputField/InputField';
-import '../styles.css';
+import './Chat.css';
+import img from "../Images/send-message.png";
+import newChatImg from "../Images/new-message.png";
 
 interface Message {
     content: string;
@@ -36,88 +36,56 @@ const Chat: React.FC = () => {
     };
 
     return (
-        <Container maxWidth="xl" sx={{ height: '100vh', display: 'flex', padding: '0' }}>
-            {/* Левая панель для информации о чатах */}
-            <Grid container spacing={2} sx={{ height: '100%' }}>
-                <Grid item xs={3}>
-                    <Paper sx={{ height: '100%', padding: '20px', backgroundColor: '#0077b6' }}>
-                        <Typography variant="h5" color="white">
-                            Your Chats
-                        </Typography>
-                        <Divider sx={{ backgroundColor: 'white', margin: '20px 0' }} />
-                        <List>
-                            <ListItem>
-                                <Typography color="white">Chat 1</Typography>
-                            </ListItem>
-                            <ListItem>
-                                <Typography color="white">Chat 2</Typography>
-                            </ListItem>
-                            {/* Можно добавить еще чаты */}
-                        </List>
-                        <Button variant="contained" color="primary" fullWidth>
-                            New Chat
-                        </Button>
-                    </Paper>
-                </Grid>
+        <div className="chat-container">
+            <div className="chat-sidebar">
+                <div className="chat-sidebar-header">
+                    <h3 className="chat-sidebar-title">Your Chats</h3>
+                    <img src={newChatImg} alt="New Chat" className="new-chat-img" />
+                </div>
+                <hr className="chat-divider" />
+                <ul className="chat-list">
+                    <li className="chat-list-item">Chat 1</li>
+                    <li className="chat-list-item">Chat 2</li>
+                </ul>
+            </div>
 
-                <Grid item xs={9}>
-                    <Paper sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                        <Box
-                            sx={{
-                                flexGrow: 1,
-                                padding: '20px',
-                                backgroundColor: '#e0f7fa',
-                                overflowY: 'auto',
-                            }}
+            <div className="chat-main">
+                <div className="chat-messages">
+                    {messages.map((message, index) => (
+                        <motion.div
+                            key={index}
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.3 }}
                         >
+                            <Message content={message.content} role={message.role} />
+                        </motion.div>
+                    ))}
+                </div>
 
-                            {messages.map((message, index) => (
-                                <motion.div
-                                    key={index}
-                                    initial={{ opacity: 0, y: 20 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ duration: 0.3 }}
-                                >
-                                    <Message content={message.content} role={message.role} />
-                                </motion.div>
-                            ))}
-                        </Box>
+                {/* Поле ввода сообщения */}
+                <form
+                    className="chat-input-container"
+                    onSubmit={(e) => {
+                        e.preventDefault();
+                        handleSend(inputValue);
+                        setInputValue('');
+                    }}
+                >
+                    <input
+                        type="text"
+                        value={inputValue}
+                        onChange={(e) => setInputValue(e.target.value)}
+                        className="chat-input"
+                        placeholder="Write your message"
+                    />
 
-
-                        <Box
-                            component="form"
-                            sx={{
-                                padding: '20px',
-                                display: 'flex',
-                                borderTop: '1px solid #0077b6',
-                                backgroundColor: '#fff',
-                            }}
-                            onSubmit={(e) => {
-                                e.preventDefault();
-                                handleSend(inputValue);
-                                setInputValue('');
-                            }}
-                        >
-                            <TextField
-                                value={inputValue}
-                                onChange={(e) => setInputValue(e.target.value)}
-                                variant="outlined"
-                                fullWidth
-                                placeholder="Type your message..."
-                            />
-                            <Button
-                                type="submit"
-                                variant="contained"
-                                color="primary"
-                                sx={{ marginLeft: '10px' }}
-                            >
-                                Send
-                            </Button>
-                        </Box>
-                    </Paper>
-                </Grid>
-            </Grid>
-        </Container>
+                    <button type="submit" className="chat-send-button">
+                        <img src={img} alt="Send" className="send-img" />
+                    </button>
+                </form>
+            </div>
+        </div>
     );
 };
 

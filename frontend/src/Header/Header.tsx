@@ -7,7 +7,6 @@ export default function Header() {
     const headerRef = useRef<HTMLElement | null>(null);
 
     useEffect(() => {
-        // Анимация для хедера
         if (headerRef.current) {
             gsap.fromTo(headerRef.current, { opacity: 0, y: -50 }, { opacity: 1, y: 0, duration: 1, ease: "power4.out" });
         }

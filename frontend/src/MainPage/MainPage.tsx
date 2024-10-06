@@ -6,7 +6,6 @@ import Header from "../Header/Header";
 // @ts-ignore
 import smiley from '../Images/clipart1366776.png';
 import { Snackbar, Button } from '@mui/material';
-
 import './MainPage.css';
 
 export default function MainPage() {
@@ -87,18 +86,45 @@ export default function MainPage() {
         setOpenSnackbar(false);
     };
 
+    const waveText = "Welcome to the Medical AI Assistant!".split("").map((char, index) => (
+        <span key={index} className="wave-text" style={{ animationDelay: `${index * 0.1}s` }}>
+            {char === " " ? "\u00A0" : char}
+        </span>
+    ));
+
+    useEffect(() => {
+        const startWaveAnimation = () => {
+            const letters = document.querySelectorAll('.wave-text');
+            letters.forEach((letter, index) => {
+                (letter as HTMLElement).style.animation = 'none';
+
+                // Перезапускаем анимацию
+                setTimeout(() => {
+                    (letter as HTMLElement).style.animation = `wave 1s ease-in-out ${index * 0.1}s`;
+                }, 10);
+            });
+        };
+
+        const intervalId = setInterval(() => {
+            startWaveAnimation();
+        }, 10000);
+
+        startWaveAnimation();
+        return () => clearInterval(intervalId);
+    }, []);
+
     return (
         <>
             <Header />
             <div className="main-content">
-                <h1 ref={titleRef}>Welcome to the Medical AI Assistant!</h1>
-                <p ref={textRef}>
+                <h1 ref={titleRef} className="wave-text-container">{waveText}</h1>
+                <p ref={textRef} className="intro-text">
                     Your personal assistant in the world of healthcare and pharmaceuticals. We are here to help you find reliable information about medicines, healthcare, and more.
                 </p>
                 <div className="try-chat-container" ref={buttonRef}>
-                        <Button variant="contained" color="primary" onClick={handleTryChatClick}>
-                            Try Chat
-                        </Button>
+                    <Button variant="contained" color="primary" onClick={handleTryChatClick}>
+                        TRY CHAT
+                    </Button>
                 </div>
             </div>
             <div className="smiley-container">
@@ -107,7 +133,6 @@ export default function MainPage() {
                 <div className="eye right-eye" ref={rightEyeRef}></div>
             </div>
 
-            {/* Snackbar для уведомления */}
             <Snackbar
                 open={openSnackbar}
                 autoHideDuration={3000}
