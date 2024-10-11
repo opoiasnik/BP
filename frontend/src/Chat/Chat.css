@@ -43,12 +43,7 @@
     padding: 0;
 }
 
-.chat-list-item {
-    padding: 10px;
-    color: white;
-    cursor: pointer;
-    transition: background-color 0.3s;
-}
+
 
 .chat-list-item:hover {
     background-color: #005f8f;

@@ -6,10 +6,14 @@ import Message from '../Message/Message';
 import './Chat.css';
 import img from "../Images/send-message.png";
 import newChatImg from "../Images/new-message.png";
+import ChatItem from "../ChatItem/ChatItem";
 
 interface Message {
     content: string;
     role: 'user' | 'assistant';
+}
+interface ChatItemProps {
+    index: number;
 }
 
 const Chat: React.FC = () => {
@@ -34,6 +38,30 @@ const Chat: React.FC = () => {
             console.error('Ошибка при отправке запроса:', error);
         }
     };
+    const fullfillChatItems = () => {
+        let countOfChats:number = 10;
+        const chatItems: JSX.Element[] = [];
+        for (let i = 1; i < countOfChats; i++){
+            chatItems.push(<ChatItem index={i} key={i} onMouseDownEvent={handleMouseDown} onMouseMoveEvent={handleMouseMove} onMouseUpEvent={handleMouseUp}  />)
+        }
+        return chatItems;
+    }
+    const addEventListenerChatItem = (elements: HTMLElement[]) => {
+        elements.forEach(item => {
+            item.addEventListener('mousedown', () => {
+
+            })
+        })
+    }
+    const handleMouseDown = () => {
+        console.log('mouseDown');
+    }
+    const handleMouseMove = () => {
+        console.log('mouseMove');
+    }
+    const handleMouseUp = () => {
+        console.log('mouseUp');
+    }
 
     return (
         <div className="chat-container">
@@ -44,8 +72,7 @@ const Chat: React.FC = () => {
                 </div>
                 <hr className="chat-divider" />
                 <ul className="chat-list">
-                    <li className="chat-list-item">Chat 1</li>
-                    <li className="chat-list-item">Chat 2</li>
+                    {fullfillChatItems()}
                 </ul>
             </div>
 

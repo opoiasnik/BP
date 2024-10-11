@@ -1,29 +1,23 @@
 from flask import Flask, request, jsonify
-from flask_cors import CORS  # Для поддержки CORS
-from model import process_query_with_mistral  # Импорт вашей функции обработки запроса
+from flask_cors import CORS  # Импортируем CORS
+from model import process_query_with_mistral
 
 # Инициализация приложения Flask
 app = Flask(__name__)
+CORS(app)  # Разрешаем все запросы CORS для всех маршрутов
 
-# Включение CORS для всех маршрутов
-CORS(app)
 
 @app.route('/api/chat', methods=['POST'])
 def chat():
-    # Получение данных из запроса
     data = request.get_json()
     query = data.get('query', '')
 
-    if not query:
-        return jsonify({'error': 'Вопрос не был предоставлен.'}), 400
+    # Обработка запроса с использованием функции модели
+    response = process_query_with_mistral(query)
 
-    # Обработка запроса через Mistral и Elasticsearch
-    try:
-        summary, links = process_query_with_mistral(query)
-        return jsonify({'summary': summary, 'links': links})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    # Возвращаем результат в формате JSON
+    return jsonify(response)
+
 
 if __name__ == "__main__":
-    # Запуск сервера на порту 5000
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True)

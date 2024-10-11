@@ -1,10 +1,10 @@
 import os
-from sentence_transformers import SentenceTransformer
-from elasticsearch import Elasticsearch
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_elasticsearch import ElasticsearchStore
 from mistralai import Mistral
+import logging
 
 # Настройка логирования
-import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -15,94 +15,72 @@ if not api_key:
 
 client = Mistral(api_key=api_key)
 
-# Инициализация модели Sentence-BERT
-logger.info("Загрузка модели SentenceTransformer...")
-sbert_model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
+# Инициализация модели для векторных представлений
+logger.info("Загрузка модели HuggingFaceEmbeddings...")
+embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
 
-# Подключение к Elasticsearch
-logger.info("Подключение к Elasticsearch...")
-es = Elasticsearch("http://localhost:9200")
+# Настройка подключения к Elasticsearch через LangChain
+logger.info("Подключение к Elasticsearch через LangChain...")
+vectorstore = ElasticsearchStore(
+    es_url="http://localhost:9200",
+    index_name='drug_docs',
+    embedding=embeddings,
+    es_user='elastic',
+    es_password='sSz2BEGv56JRNjGFwoQ191RJ'
+)
 
 def process_query_with_mistral(query, k=10):
-    # Генерация вектора запроса с помощью SBERT
-    query_embedding = sbert_model.encode(query, convert_to_tensor=True)
+    logger.info("Обработка запроса началась.")
 
-    # Поиск в Elasticsearch с использованием подсветки
-    response = es.search(
-        index='drug_docs',
-        body={
-            'query': {
-                'match': {'text': query}
-            },
-            'highlight': {
-                'fields': {
-                    'text': {}
-                },
-                'fragment_size': 200,  # Уменьшаем размер фрагмента до 200 символов
-                'number_of_fragments': 1  # Один фрагмент на документ
-            },
-            'size': k
-        }
-    )
+    try:
+        response = vectorstore.similarity_search(query, k=k)
+        if not response:
+            logger.info("Ничего не найдено.")
+            return {"summary": "Ничего не найдено", "links": [], "status_log": ["Ничего не найдено."]}
 
-    hits = response['hits']['hits']
-    if not hits:
-        return "Ничего не найдено", []
+        logger.info("Поиск в Elasticsearch завершён.")
 
-    # Извлекаем релевантные фрагменты и ограничиваем размер текста
-    top_documents = hits[:3]  # Сохраняем 3 документа
-    documents = []
-    links = []
-    for hit in top_documents:
-        if 'highlight' in hit:
-            doc_text = hit['highlight']['text'][0]
+        documents = []
+        links = []
+        for hit in response:
+            text = hit.metadata.get('text', None)
+            if text:
+                documents.append(text)
+            link = hit.metadata.get('link', '-')
+            links.append(link)
+
+        structured_prompt = (
+            f"Na základe otázky: '{query}' a nasledujúcich informácií: {documents}, "
+            "poskytnite odpoveď, ktorá obsahает три lieky alebo riešenія с краткым vysvetленím pre každý з них. "
+            "Odpoveď by mala byť poskytnutá в slovenčine."
+        )
+
+        if len(structured_prompt.split()) > 32000:
+            logger.info("Запрос слишком большой для обработки моделью.")
+            return {"summary": "Запрос слишком большой для обработки моделью.", "links": links,
+                    "status_log": ["Запрос слишком большой для обработки моделью."]}
+
+        logger.info("Запрос к модели Mistral отправлен.")
+
+        response = client.chat.complete(
+            model="mistral-small-latest",
+            messages=[{
+                "content": structured_prompt,
+                "role": "user",
+            }]
+        )
+
+        if response:
+            summary = response.choices[0].message.content
+            logger.info("Ответ получен от модели Mistral.")
+            logger.info(f"Полученный ответ: {summary}")
         else:
-            doc_text = hit['_source']['text'][:200]  # Обрезаем текст до 200 символов
-        documents.append(doc_text)
-        links.append(hit['_source'].get('link', '-'))
+            summary = "Ответ не был сгенерирован"
+            logger.info("Модель Mistral не вернула ответ.")
 
-    # Формирование структурированного запроса для Mistral
-    structured_prompt = (
-        f"Na základe otázky: '{query}' a nasledujúcich informácií: {documents}, "
-        "poskytnite odpoveď, ktorá obsahuje tri lieky alebo riešenia s krátkym vysvetlením pre každý z nich. "
-        "Poskytnite stručné a štruktúrované vysvetlenie vhodné pre otázku, zamerané na kľúčové body. "
-        "Odpoveď by mala byť poskytnutá v slovenčine."
-    )
+        return {"summary": summary, "links": links, "status_log": ["Ответ получен от модели Mistral."]}
 
-    # Проверяем количество токенов в промпте
-    token_count = len(structured_prompt.split())
-    print(f"Количество токенов в промпте: {token_count}")
-
-    # Если промпт все еще слишком большой, информируем пользователя
-    if token_count > 32000:
-        return "К сожалению, запрос слишком большой для обработки моделью. Попробуйте уточнить вопрос или сократить объем данных.", links
-
-    # Запрос к модели Mistral
-    response = client.chat.complete(
-        model="mistral-small-latest",
-        messages=[{
-            "content": structured_prompt,
-            "role": "user",
-        }]
-    )
-
-    summary = response.choices[0].message.content if response else "Ответ не был сгенерирован"
-    return summary, links
-
-
-def main():
-    print("Добро пожаловать! Введите ваш запрос или 'exit' для выхода.")
-    while True:
-        query = input("Ваш вопрос: ")
-        if query.lower() == 'exit':
-            break
-        summary, links = process_query_with_mistral(query)
-        print("\nОтвет:")
-        print(summary)
-        print("\nСсылки:")
-        for link in links:
-            print(f"- {link}")
-        print("\n")
-
-if __name__ == "__main__":
-    main()
+    except Exception as e:
+        error_message = f"Ошибка: {str(e)}"
+        logger.info(error_message)
+        return {"summary": "Произошла ошибка", "links": [], "status_log": [error_message]}
