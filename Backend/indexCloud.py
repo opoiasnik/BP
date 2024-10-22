@@ -1,8 +1,12 @@
-import json
 from elasticsearch import Elasticsearch
 from langchain_huggingface import HuggingFaceEmbeddings
+import json
+import sys
 
-es = Elasticsearch([{'host': 'localhost', 'port': 9200, 'scheme': 'http'}])
+es = Elasticsearch(
+    cloud_id="tt:dXMtZWFzdC0yLmF3cy5lbGFzdGljLWNsb3VkLmNvbTo0NDMkOGM3ODQ0ZWVhZTEyNGY3NmFjNjQyNDFhNjI4NmVhYzMkZTI3YjlkNTQ0ODdhNGViNmEyMTcxMjMxNmJhMWI0ZGU=",
+    basic_auth=("elastic", "sSz2BEGv56JRNjGFwoQ191RJ")
+)
 
 embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
 
@@ -14,7 +18,8 @@ def load_drug_data(json_path):
 
 
 def index_documents(data):
-    for i, item in enumerate(data):
+    total_documents = len(data)
+    for i, item in enumerate(data, start=1):
         doc_text = f"{item['link']} {item.get('pribalovy_letak', '')} {item.get('spc', '')}"
 
         vector = embeddings.embed_query(doc_text)
@@ -25,9 +30,12 @@ def index_documents(data):
             'full_data': item
         })
 
+        sys.stdout.write(f"\rПроиндексировано {i} из {total_documents} документов")
+        sys.stdout.flush()
 
-data_path = "data/cleaned_general_info_additional.json"
+    print("\nИндексирование завершено.")
+
+
+data_path = "../../data_adc_databaza/cleaned_general_info_additional.json"
 drug_data = load_drug_data(data_path)
 index_documents(drug_data)
-
-print("Индексирование завершено.")

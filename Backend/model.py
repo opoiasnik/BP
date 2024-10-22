@@ -1,86 +1,108 @@
-import os
+from elasticsearch import Elasticsearch
+import json
+import requests
+from langchain.chains import SequentialChain
+from langchain.chains import LLMChain, SequentialChain
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_elasticsearch import ElasticsearchStore
-from mistralai import Mistral
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 import logging
 
-# Настройка логирования
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Настройка API ключа для Mistral
-api_key = os.getenv("MISTRAL_API_KEY")
-if not api_key:
-    raise ValueError("API ключ не найден. Убедитесь, что переменная MISTRAL_API_KEY установлена.")
 
-client = Mistral(api_key=api_key)
 
-# Инициализация модели для векторных представлений
+
+mistral_api_key = "hXDC4RBJk1qy5pOlrgr01GtOlmyCBaNs"
+if not mistral_api_key:
+    raise ValueError("API ключ не найден.")
+
+
+class CustomMistralLLM:
+    def __init__(self, api_key: str, endpoint_url: str):
+        self.api_key = api_key
+        self.endpoint_url = endpoint_url
+
+    def generate_text(self, prompt: str, max_tokens=512, temperature=0.7):
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": "mistral-small-latest",
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": max_tokens,
+            "temperature": temperature
+        }
+        response = requests.post(self.endpoint_url, headers=headers, json=payload)
+        response.raise_for_status()
+        result = response.json()
+        logger.info(f"Полный ответ от модели Mistral: {result}")
+        return result.get("choices", [{}])[0].get("message", {}).get("content", "No response")
+
+
 logger.info("Загрузка модели HuggingFaceEmbeddings...")
 embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
 
-# Настройка подключения к Elasticsearch через LangChain
-logger.info("Подключение к Elasticsearch через LangChain...")
-vectorstore = ElasticsearchStore(
-    es_url="http://localhost:9200",
-    index_name='drug_docs',
-    embedding=embeddings,
-    es_user='elastic',
-    es_password='sSz2BEGv56JRNjGFwoQ191RJ'
+
+config_file_path = "config.json"
+
+
+with open(config_file_path, 'r') as config_file:
+    config = json.load(config_file)
+
+#  Cloud ID
+if config.get("useCloud", False):
+    logger.info("CLOUD ELASTIC")
+    cloud_id = "tt:dXMtZWFzdC0yLmF3cy5lbGFzdGljLWNsb3VkLmNvbTo0NDMkOGM3ODQ0ZWVhZTEyNGY3NmFjNjQyNDFhNjI4NmVhYzMkZTI3YjlkNTQ0ODdhNGViNmEyMTcxMjMxNmJhMWI0ZGU="  # Замените на ваш Cloud ID
+    vectorstore = ElasticsearchStore(
+        es_cloud_id=cloud_id,
+        index_name='drug_docs',
+        embedding=embeddings,
+        es_user = "elastic",
+        es_password = "sSz2BEGv56JRNjGFwoQ191RJ",
+    )
+else:
+    logger.info("LOCAL ELASTIC")
+    vectorstore = ElasticsearchStore(
+        es_url="http://localhost:9200",
+        index_name='drug_docs',
+        embedding=embeddings,
+    )
+
+logger.info(f"Подключение установлено к {'облачному' if config.get('useCloud', False) else 'локальному'} Elasticsearch")
+
+# LLM
+llm = CustomMistralLLM(
+    api_key=mistral_api_key,
+    endpoint_url="https://api.mistral.ai/v1/chat/completions"
 )
 
 def process_query_with_mistral(query, k=10):
     logger.info("Обработка запроса началась.")
-
     try:
+        # Elasticsearch LangChain
         response = vectorstore.similarity_search(query, k=k)
         if not response:
-            logger.info("Ничего не найдено.")
             return {"summary": "Ничего не найдено", "links": [], "status_log": ["Ничего не найдено."]}
 
-        logger.info("Поиск в Elasticsearch завершён.")
-
-        documents = []
-        links = []
-        for hit in response:
-            text = hit.metadata.get('text', None)
-            if text:
-                documents.append(text)
-            link = hit.metadata.get('link', '-')
-            links.append(link)
-
+        documents = [hit.metadata.get('text', '') for hit in response]
+        links = [hit.metadata.get('link', '-') for hit in response]
         structured_prompt = (
-            f"Na základe otázky: '{query}' a nasledujúcich informácií: {documents}, "
-            "poskytnite odpoveď, ktorá obsahает три lieky alebo riešenія с краткым vysvetленím pre každý з них. "
-            "Odpoveď by mala byť poskytnutá в slovenčine."
+            f"Na základe otázky: '{query}' a nasledujúcich informácií o liekoch: {documents}. "
+            "Uveďte tri vhodné lieky alebo riešenia s krátkym vysvetlením pre každý z nich. "
+            "Odpoveď musí byť v slovenčine."
         )
 
-        if len(structured_prompt.split()) > 32000:
-            logger.info("Запрос слишком большой для обработки моделью.")
-            return {"summary": "Запрос слишком большой для обработки моделью.", "links": links,
-                    "status_log": ["Запрос слишком большой для обработки моделью."]}
+        summary = llm.generate_text(prompt=structured_prompt, max_tokens=512, temperature=0.7)
 
-        logger.info("Запрос к модели Mistral отправлен.")
+        #TextSplitter
+        splitter = RecursiveCharacterTextSplitter(chunk_size=200, chunk_overlap=20)
+        split_summary = splitter.split_text(summary)
 
-        response = client.chat.complete(
-            model="mistral-small-latest",
-            messages=[{
-                "content": structured_prompt,
-                "role": "user",
-            }]
-        )
-
-        if response:
-            summary = response.choices[0].message.content
-            logger.info("Ответ получен от модели Mistral.")
-            logger.info(f"Полученный ответ: {summary}")
-        else:
-            summary = "Ответ не был сгенерирован"
-            logger.info("Модель Mistral не вернула ответ.")
-
-        return {"summary": summary, "links": links, "status_log": ["Ответ получен от модели Mistral."]}
-
+        return {"summary": split_summary, "links": links, "status_log": ["Ответ получен от модели Mistral."]}
     except Exception as e:
-        error_message = f"Ошибка: {str(e)}"
-        logger.info(error_message)
-        return {"summary": "Произошла ошибка", "links": [], "status_log": [error_message]}
+        logger.info(f"Ошибка: {str(e)}")
+        return {"summary": "Произошла ошибка", "links": [], "status_log": [f"Ошибка: {str(e)}"]}
