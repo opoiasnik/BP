@@ -1,26 +1,29 @@
+// Chat.tsx
 import React, { useState } from 'react';
 import axios from 'axios';
 import { motion } from 'framer-motion';
 import Message from '../Message/Message';
 import './Chat.css';
-import img from '../Images/send-message.png';
+import sendImg from '../Images/send-message.png';
 import newChatImg from '../Images/new-message.png';
 import ChatItem from '../ChatItem/ChatItem';
 
-interface Message {
+interface MessageType {
     content: string;
     role: 'user' | 'assistant';
+    rating?: number;
+    explanation?: string;
 }
 
 const Chat: React.FC = () => {
-    const [messages, setMessages] = useState<Message[]>([]);
+    const [messages, setMessages] = useState<MessageType[]>([]);
     const [inputValue, setInputValue] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
     const handleSend = async (messageContent: string) => {
         if (messageContent.trim() === '') return;
 
-        const newMessage: Message = { content: messageContent, role: 'user' };
+        const newMessage: MessageType = { content: messageContent, role: 'user' };
         setMessages([...messages, newMessage]);
         setInputValue('');
         setIsLoading(true);
@@ -30,7 +33,7 @@ const Chat: React.FC = () => {
                 query: messageContent,
             });
 
-            const assistantMessages: Message[] = [];
+            const assistantMessages: MessageType[] = [];
 
             const { vector_search, text_search } = response.data;
 
@@ -40,9 +43,12 @@ const Chat: React.FC = () => {
                     const smallContent = Array.isArray(vector_search.summaries.small)
                         ? vector_search.summaries.small.join('\n')
                         : vector_search.summaries.small;
+
                     assistantMessages.push({
                         content: `**Ответ от маленькой модели (векторный поиск):**\n${smallContent}`,
                         role: 'assistant',
+                        rating: vector_search.small_vector_eval.rating,
+                        explanation: vector_search.small_vector_eval.explanation,
                     });
                 }
 
@@ -50,9 +56,12 @@ const Chat: React.FC = () => {
                     const largeContent = Array.isArray(vector_search.summaries.large)
                         ? vector_search.summaries.large.join('\n')
                         : vector_search.summaries.large;
+
                     assistantMessages.push({
                         content: `**Ответ от большой модели (векторный поиск):**\n${largeContent}`,
                         role: 'assistant',
+                        rating: vector_search.large_vector_eval.rating,
+                        explanation: vector_search.large_vector_eval.explanation,
                     });
                 }
             }
@@ -63,9 +72,12 @@ const Chat: React.FC = () => {
                     const smallContent = Array.isArray(text_search.summaries.small)
                         ? text_search.summaries.small.join('\n')
                         : text_search.summaries.small;
+
                     assistantMessages.push({
                         content: `**Ответ от маленькой модели (текстовый поиск):**\n${smallContent}`,
                         role: 'assistant',
+                        rating: text_search.small_text_eval.rating,
+                        explanation: text_search.small_text_eval.explanation,
                     });
                 }
 
@@ -73,9 +85,12 @@ const Chat: React.FC = () => {
                     const largeContent = Array.isArray(text_search.summaries.large)
                         ? text_search.summaries.large.join('\n')
                         : text_search.summaries.large;
+
                     assistantMessages.push({
                         content: `**Ответ от большой модели (текстовый поиск):**\n${largeContent}`,
                         role: 'assistant',
+                        rating: text_search.large_text_eval.rating,
+                        explanation: text_search.large_text_eval.explanation,
                     });
                 }
             }
@@ -94,8 +109,6 @@ const Chat: React.FC = () => {
             setIsLoading(false);
         }
     };
-
-    // Остальной код остается без изменений
 
     const fullfillChatItems = () => {
         const countOfChats: number = 10;
@@ -144,7 +157,12 @@ const Chat: React.FC = () => {
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.3 }}
                         >
-                            <Message content={message.content} role={message.role} />
+                            <Message
+                                content={message.content}
+                                role={message.role}
+                                rating={message.rating}
+                                explanation={message.explanation}
+                            />
                         </motion.div>
                     ))}
                     {isLoading && (
@@ -176,7 +194,7 @@ const Chat: React.FC = () => {
                     />
 
                     <button type="submit" className="chat-send-button" disabled={isLoading}>
-                        <img src={img} alt="Send" className="send-img" />
+                        <img src={sendImg} alt="Send" className="send-img" />
                     </button>
                 </form>
             </div>
