@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 # Создаем Flask приложение
 app = Flask(__name__)
 CORS(app)  # Разрешаем CORS для всех доменов
+CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173"}})
 
 # Маршрут для обработки запросов от фронтенда
 @app.route('/api/chat', methods=['POST'])
