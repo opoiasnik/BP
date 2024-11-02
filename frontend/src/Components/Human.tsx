@@ -13,9 +13,9 @@ const MuscleDiagram: React.FC = () => {
     setHighlightedMuscle(null);
   };
 
-  const handleMuscleClick = (muscle: Muscle) => {
-    
-  }
+  // const handleMuscleClick = (muscle: Muscle) => {
+  //
+  // }
 
   const getDarkerColor = (baseColor: string) => {
     const colorValue = parseInt(baseColor.slice(1), 16);

@@ -83,12 +83,12 @@ if config.get("useCloud", False):
         index_name='drug_docs',
         embedding=embeddings,
         es_user="elastic",
-        es_password="sSz2BEGv56JRNjGFwoQ191RJ",
+        es_password="sSz2BEGv56JRNjGFwoQ191RJ"
     )
 else:
-    logger.info("LOCAL ELASTIC")
+    logger.info("LOCALlla ELASTIC")
     vectorstore = ElasticsearchStore(
-        es_url="http://localhost:9200",
+        es_url="http://elasticsearch:9200",
         index_name=index_name,
         embedding=embeddings,
     )
