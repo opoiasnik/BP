@@ -88,7 +88,7 @@ if config.get("useCloud", False):
 else:
     logger.info("LOCALlla ELASTIC")
     vectorstore = ElasticsearchStore(
-        es_url="http://elasticsearch:9200",
+        es_url="http://localhost:9200",
         index_name=index_name,
         embedding=embeddings,
     )
@@ -142,9 +142,7 @@ def evaluate_results(query, summaries, model_name):
 
 
 
-# Функция для сравнения результатов двух моделей
-# Функция для сравнения результатов двух моделей
-# Функция для сравнения результатов двух моделей
+
 def compare_models(small_model_results, large_model_results, query):
     logger.info("Начато сравнение моделей Mistral Small и Mistral Large")
 
@@ -167,9 +165,6 @@ def compare_models(small_model_results, large_model_results, query):
 
 
 
-# Функция для обработки запроса
-# Функция для обработки запроса
-# Функция для обработки запроса
 def process_query_with_mistral(query, k=10):
     logger.info("Обработка запроса началась.")
     try:

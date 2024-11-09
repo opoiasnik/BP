@@ -1,6 +1,6 @@
-import { CgGym } from "react-icons/cg";
-import { FaBed } from "react-icons/fa6";
-import { MdFastfood } from "react-icons/md";
+
+import {  MdLocalPharmacy, MdSelfImprovement } from "react-icons/md";
+import { GiPill } from "react-icons/gi";
 import { useState } from "react";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
@@ -10,7 +10,7 @@ import { useLazySendChatQuestionQuery } from "../store/api/chatApi";
 const HomePage = () => {
     const [sendChatQuestion, { isLoading, isFetching }] = useLazySendChatQuestionQuery();
 
-    type Category = 'sport' | 'feed' | 'sleep';
+    type Category = 'medication' | 'supplements' | 'lifestyle';
     const [category, setCategory] = useState<Category | null>(null);
     const [message, setMessage] = useState<string>('');
     const [chatHistory, setChatHistory] = useState<{ sender: string; text: string, rating?: number, explanation?: string }[]>([]);
@@ -26,14 +26,11 @@ const HomePage = () => {
             const res = await sendChatQuestion(question).unwrap();
             console.log("Response from server:", res);
 
-            // Извлекаем лучший ответ и очищаем его от ненужных символов
             let bestAnswer = res.best_answer.replace(/[*#]/g, "");
             const model = res.model;
 
-            // Форматируем ответ для удобства чтения
             bestAnswer = bestAnswer.replace(/(\d\.\s)/g, "\n\n$1").replace(/:\s-/g, ":\n-");
 
-            // Создаем сообщение для чата с лучшим ответом
             const assistantMessage = {
                 sender: 'Assistant',
                 text: `Model: ${model}:\n${bestAnswer}`,
@@ -92,22 +89,29 @@ const HomePage = () => {
 
             <div id="buttons">
                 <div className="flex gap-6">
-                    <button onClick={() => setCategory('sport')} className={`flex items-center shadow-lg justify-center gap-2 ${category === 'sport' ? 'bg-bright-blue' : 'bg-gray-300'}  text-white rounded-md font-medium hover:opacity-90 duration-200 h-12 w-40`}>
-                        Training <CgGym size={30} />
+                    <button onClick={() => setCategory('medication')}
+                            className={`flex items-center shadow-lg justify-center gap-2 ${category === 'medication' ? 'bg-bright-blue' : 'bg-gray-300'}  text-white rounded-md font-medium hover:opacity-90 duration-200 h-12 w-40`}>
+                        Medications <MdLocalPharmacy size={30}/>
                     </button>
-                    <button onClick={() => setCategory('sleep')} className={`flex items-center shadow-lg justify-center gap-2  ${category === 'sleep' ? 'bg-bright-blue' : 'bg-gray-300'} text-white rounded-md font-medium hover:opacity-90 duration-200 h-12 w-40`}>
-                        Sleep  <FaBed size={25} />
+                    <button onClick={() => setCategory('supplements')}
+                            className={`flex items-center shadow-lg justify-center gap-2 ${category === 'supplements' ? 'bg-bright-blue' : 'bg-gray-300'} text-white rounded-md font-medium hover:opacity-90 duration-200 h-12 w-40`}>
+                        Supplements <GiPill size={25}/>
                     </button>
-                    <button onClick={() => setCategory('feed')} className={`flex items-center shadow-lg justify-center gap-2  ${category === 'feed' ? 'bg-bright-blue' : 'bg-gray-300'} text-white rounded-md font-medium hover:opacity-90 duration-200 h-12 w-40`}>
-                        Feed  <MdFastfood size={20} />
+                    <button onClick={() => setCategory('lifestyle')}
+                            className={`flex items-center shadow-lg justify-center gap-2 ${category === 'lifestyle' ? 'bg-bright-blue' : 'bg-gray-300'} text-white rounded-md font-medium hover:opacity-90 duration-200 h-12 w-40`}>
+                        Lifestyle <MdSelfImprovement size={25}/>
                     </button>
                 </div>
             </div>
 
             <div id="input" className="w-2/3 rounded-xl drop-shadow-2xl mb-20">
                 <div className="flex">
-                    <input placeholder="Waiting for your question..." value={message} onChange={(e) => setMessage(e.target.value)} className="w-full px-5 py-2 rounded-l-xl outline-none" type="text" />
-                    <button disabled={isLoading || isFetching} onClick={onSubmit} className="bg-black rounded-r-xl px-4 py-2 text-white font-semibold hover:bg-slate-700">Send</button>
+                    <input placeholder="Waiting for your question..." value={message}
+                           onChange={(e) => setMessage(e.target.value)}
+                           className="w-full px-5 py-2 rounded-l-xl outline-none" type="text"/>
+                    <button disabled={isLoading || isFetching} onClick={onSubmit}
+                            className="bg-black rounded-r-xl px-4 py-2 text-white font-semibold hover:bg-slate-700">Send
+                    </button>
                 </div>
             </div>
         </div>
