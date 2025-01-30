@@ -87,22 +87,22 @@ const HomePage = () => {
                 )}
             </div>
 
-            <div id="buttons">
-                <div className="flex gap-6">
-                    <button onClick={() => setCategory('medication')}
-                            className={`flex items-center shadow-lg justify-center gap-2 ${category === 'medication' ? 'bg-bright-blue' : 'bg-gray-300'}  text-white rounded-md font-medium hover:opacity-90 duration-200 h-12 w-40`}>
-                        Medications <MdLocalPharmacy size={30}/>
-                    </button>
-                    <button onClick={() => setCategory('supplements')}
-                            className={`flex items-center shadow-lg justify-center gap-2 ${category === 'supplements' ? 'bg-bright-blue' : 'bg-gray-300'} text-white rounded-md font-medium hover:opacity-90 duration-200 h-12 w-40`}>
-                        Supplements <GiPill size={25}/>
-                    </button>
-                    <button onClick={() => setCategory('lifestyle')}
-                            className={`flex items-center shadow-lg justify-center gap-2 ${category === 'lifestyle' ? 'bg-bright-blue' : 'bg-gray-300'} text-white rounded-md font-medium hover:opacity-90 duration-200 h-12 w-40`}>
-                        Lifestyle <MdSelfImprovement size={25}/>
-                    </button>
-                </div>
-            </div>
+            {/*<div id="buttons">*/}
+            {/*    <div className="flex gap-6">*/}
+            {/*        <button onClick={() => setCategory('medication')}*/}
+            {/*                className={`flex items-center shadow-lg justify-center gap-2 ${category === 'medication' ? 'bg-bright-blue' : 'bg-gray-300'}  text-white rounded-md font-medium hover:opacity-90 duration-200 h-12 w-40`}>*/}
+            {/*            Medications <MdLocalPharmacy size={30}/>*/}
+            {/*        </button>*/}
+            {/*        <button onClick={() => setCategory('supplements')}*/}
+            {/*                className={`flex items-center shadow-lg justify-center gap-2 ${category === 'supplements' ? 'bg-bright-blue' : 'bg-gray-300'} text-white rounded-md font-medium hover:opacity-90 duration-200 h-12 w-40`}>*/}
+            {/*            Supplements <GiPill size={25}/>*/}
+            {/*        </button>*/}
+            {/*        <button onClick={() => setCategory('lifestyle')}*/}
+            {/*                className={`flex items-center shadow-lg justify-center gap-2 ${category === 'lifestyle' ? 'bg-bright-blue' : 'bg-gray-300'} text-white rounded-md font-medium hover:opacity-90 duration-200 h-12 w-40`}>*/}
+            {/*            Lifestyle <MdSelfImprovement size={25}/>*/}
+            {/*        </button>*/}
+            {/*    </div>*/}
+            {/*</div>*/}
 
             <div id="input" className="w-2/3 rounded-xl drop-shadow-2xl mb-20">
                 <div className="flex">
