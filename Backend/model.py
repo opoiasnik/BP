@@ -194,10 +194,14 @@ def process_query_with_mistral(query, k=10):
         if vector_documents:
             # Slovak prompt
             vector_prompt = (
-                f"Na základe otázky: '{query}' a nasledujúcich informácií o liekoch: {vector_documents}. "
-                "Uveďte tri vhodné lieky alebo riešenia s krátkym vysvetlením pre každý z nich. "
+                f"Otázka: '{query}'.\n"
+                "Na základe nasledujúcich informácií o liekoch:\n"
+                f"{vector_documents}\n\n"
+                "Prosím, uveďte tri najvhodnejšie lieky alebo riešenia. Pre každý liek uveďte jeho názov a stručné, jasné vysvetlenie, prečo je vhodný. "
+                "Odpovedajte priamo a ľudským, priateľským tónom v číslovanom zozname, bez nepotrebných úvodných fráz alebo opisu procesu. "
                 "Odpoveď musí byť v slovenčine."
             )
+
             summary_small_vector = llm_small.generate_text(prompt=vector_prompt, max_tokens=700, temperature=0.7)
             summary_large_vector = llm_large.generate_text(prompt=vector_prompt, max_tokens=700, temperature=0.7)
 
@@ -224,10 +228,14 @@ def process_query_with_mistral(query, k=10):
         if text_documents:
             # Slovak prompt
             text_prompt = (
-                f"Na základe otázky: '{query}' a nasledujúcich informácií o liekoch: {text_documents}. "
-                "Uveďte tri vhodné lieky alebo riešenia s krátkym vysvetlením pre každý z nich. "
+                f"Otázka: '{query}'.\n"
+                "Na základe nasledujúcich informácií o liekoch:\n"
+                f"{text_documents}\n\n"
+                "Prosím, uveďte tri najvhodnejšie lieky alebo riešenia. Pre každý liek uveďte jeho názov a stručné, jasné vysvetlenie, prečo je vhodný. "
+                "Odpovedajte priamo a ľudským, priateľským tónom v číslovanom zozname, bez nepotrebných úvodných fráz alebo opisu procesu. "
                 "Odpoveď musí byť v slovenčine."
             )
+
             summary_small_text = llm_small.generate_text(prompt=text_prompt, max_tokens=700, temperature=0.7)
             summary_large_text = llm_large.generate_text(prompt=text_prompt, max_tokens=700, temperature=0.7)
 
