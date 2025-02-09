@@ -1,65 +1,50 @@
 import React from 'react';
 import { GoogleLogin, GoogleOAuthProvider } from '@react-oauth/google';
 import { Link, useNavigate } from 'react-router-dom';
-import gsap from 'gsap';
 
 const CLIENT_ID = "532143017111-4eqtlp0oejqaovj6rf5l1ergvhrp4vao.apps.googleusercontent.com";
 
-const RegistrationFormContent: React.FC = () => {
+const LoginFormContent: React.FC = () => {
     const navigate = useNavigate();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
         // Приведение типов для получения значений инпутов
-        const nameElement = document.getElementById('name') as HTMLInputElement | null;
         const emailElement = document.getElementById('email') as HTMLInputElement | null;
         const passwordElement = document.getElementById('password') as HTMLInputElement | null;
-        const confirmPasswordElement = document.getElementById('confirm-password') as HTMLInputElement | null;
 
-        if (!nameElement || !emailElement || !passwordElement || !confirmPasswordElement) {
-            console.error('One or more input fields are missing');
+        if (!emailElement || !passwordElement) {
+            console.error('Один или несколько инпутов отсутствуют');
             return;
         }
 
-        const name = nameElement.value;
         const email = emailElement.value;
         const password = passwordElement.value;
-        const confirmPassword = confirmPasswordElement.value;
-
-        // Проверка совпадения паролей
-        if (password !== confirmPassword) {
-            console.error('Passwords do not match');
-            alert('Passwords do not match');
-            return;
-        }
 
         try {
-            const response = await fetch('http://localhost:5000/api/register', {
+            const response = await fetch('http://localhost:5000/api/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, email, password }),
+                body: JSON.stringify({ email, password }),
             });
 
             const data = await response.json();
 
             if (response.ok) {
-                console.log('User registered successfully:', data.message);
-                // Создаем объект пользователя для авторизации (placeholder для аватара)
+                console.log('Login successful:', data.message);
                 const loggedInUser = {
-                    name,
-                    email,
-                    picture: 'https://via.placeholder.com/150',
+                    name: data.user.name,
+                    email: data.user.email,
+                    picture: data.user.picture || 'https://via.placeholder.com/150',
                 };
                 localStorage.setItem('user', JSON.stringify(loggedInUser));
                 navigate('/dashboard');
             } else {
-                console.error('Error:', data.error);
-                alert(data.error);  // Показываем сообщение об ошибке, например "User already exists"
+                console.error('Ошибка:', data.error);
             }
         } catch (error) {
-            console.error('Error registering user:', error);
-            alert('Error registering user');
+            console.error('Ошибка при входе:', error);
         }
     };
 
@@ -84,7 +69,7 @@ const RegistrationFormContent: React.FC = () => {
     };
 
     const handleGoogleLoginError = (error: any) => {
-        console.error('Ошибка аутентификации:', error);
+        console.error('Ошибка аутентификации через Google:', error);
     };
 
     return (
@@ -99,7 +84,7 @@ const RegistrationFormContent: React.FC = () => {
             }}
         >
             <div
-                className="registration-card"
+                className="login-card"
                 style={{
                     maxWidth: '400px',
                     width: '100%',
@@ -110,28 +95,9 @@ const RegistrationFormContent: React.FC = () => {
                 }}
             >
                 <h2 style={{ textAlign: 'center', fontWeight: 'bold', color: '#333', marginBottom: '16px' }}>
-                    Create Your Account
+                    Sign In
                 </h2>
-                <p style={{ textAlign: 'center', color: '#555', marginBottom: '24px' }}>
-                    Join us to explore personalized health solutions.
-                </p>
                 <form noValidate autoComplete="off" onSubmit={handleSubmit}>
-                    <div style={{ marginBottom: '16px' }}>
-                        <label htmlFor="name" style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
-                            Name
-                        </label>
-                        <input
-                            type="text"
-                            id="name"
-                            required
-                            style={{
-                                width: '100%',
-                                padding: '8px',
-                                borderRadius: '4px',
-                                border: '1px solid #ccc',
-                            }}
-                        />
-                    </div>
                     <div style={{ marginBottom: '16px' }}>
                         <label htmlFor="email" style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
                             Email
@@ -164,25 +130,6 @@ const RegistrationFormContent: React.FC = () => {
                             }}
                         />
                     </div>
-                    <div style={{ marginBottom: '24px' }}>
-                        <label
-                            htmlFor="confirm-password"
-                            style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}
-                        >
-                            Confirm Password
-                        </label>
-                        <input
-                            type="password"
-                            id="confirm-password"
-                            required
-                            style={{
-                                width: '100%',
-                                padding: '8px',
-                                borderRadius: '4px',
-                                border: '1px solid #ccc',
-                            }}
-                        />
-                    </div>
                     <button
                         type="submit"
                         style={{
@@ -197,7 +144,7 @@ const RegistrationFormContent: React.FC = () => {
                             marginBottom: '16px',
                         }}
                     >
-                        Register
+                        Sign In
                     </button>
                 </form>
                 <div
@@ -222,9 +169,9 @@ const RegistrationFormContent: React.FC = () => {
                     />
                 </div>
                 <p style={{ textAlign: 'center', color: '#555', marginTop: '16px' }}>
-                    Already have an account?{' '}
-                    <Link to="/login" style={{ color: '#007bff', textDecoration: 'none' }}>
-                        Sign In
+                    Don&apos;t have an account?{' '}
+                    <Link to="/register" style={{ color: '#007bff', textDecoration: 'none' }}>
+                        Sign Up
                     </Link>
                 </p>
             </div>
@@ -232,12 +179,12 @@ const RegistrationFormContent: React.FC = () => {
     );
 };
 
-const RegistrationForm: React.FC = () => {
+const LoginForm: React.FC = () => {
     return (
         <GoogleOAuthProvider clientId={CLIENT_ID}>
-            <RegistrationFormContent />
+            <LoginFormContent />
         </GoogleOAuthProvider>
     );
 };
 
-export default RegistrationForm;
+export default LoginForm;

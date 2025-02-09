@@ -39,36 +39,10 @@ const BouncingArrow = () => {
 interface NavbarProps {
     user: any;
     setUser: (user: any) => void;
-    signInModalOpen: boolean;
-    setSignInModalOpen: (open: boolean) => void;
 }
 
-// Компонент Navbar с авторизацией через Google (или регистрацию)
-const Navbar: React.FC<NavbarProps> = ({ user, setUser, signInModalOpen, setSignInModalOpen }) => {
-    const handleLoginSuccess = async (response: any) => {
-        try {
-            const res = await fetch('http://localhost:5000/api/verify', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ token: response.credential }),
-            });
-            const data = await res.json();
-            const loggedInUser = {
-                name: data.user.name,
-                email: data.user.email,
-                picture: data.user.picture || 'https://via.placeholder.com/150',
-            };
-            setUser(loggedInUser);
-            localStorage.setItem('user', JSON.stringify(loggedInUser));
-            setSignInModalOpen(false);
-        } catch (error) {
-            console.error('Ошибка верификации токена:', error);
-        }
-    };
-
-    const handleLoginError = () => {
-        console.error('Ошибка аутентификации');
-    };
+const Navbar: React.FC<NavbarProps> = ({ user, setUser }) => {
+    const navigate = useNavigate();
 
     const handleSignOut = () => {
         setUser(null);
@@ -76,81 +50,53 @@ const Navbar: React.FC<NavbarProps> = ({ user, setUser, signInModalOpen, setSign
     };
 
     return (
-        <GoogleOAuthProvider clientId={CLIENT_ID}>
-            <nav className="w-full bg-white shadow-md py-4 px-2 sm:px-8 flex justify-between items-center fixed top-0 left-0 right-0 z-50">
-                <div className="text-2xl font-semibold text-dark-blue flex items-center">
-                    Health AI
-                    <img src={BackImage} width={25} alt="Logo" />
-                </div>
-                <ul className="flex space-x-6 text-gray-600">
-                    <li>
-                        <Link to="/dashboard" className="hover:text-bright-blue transition duration-300">
-                            Home
-                        </Link>
-                    </li>
-                    <li>
-                        <Link to="/about" className="hover:text-bright-blue transition duration-300">
-                            About
-                        </Link>
-                    </li>
-                    <li>
-                        <Link to="/contact" className="hover:text-bright-blue transition duration-300">
-                            Contact
-                        </Link>
-                    </li>
-                </ul>
-                <div className="flex items-center">
-                    {user ? (
-                        <div className="flex items-center gap-2">
-                            <Avatar alt={user.name} src={user.picture} />
-                            <Button variant="outlined" size="small" onClick={handleSignOut}>
-                                Sign Out
-                            </Button>
-                        </div>
-                    ) : (
-                        <Button
-                            startIcon={<CgLogIn />}
-                            variant="outlined"
-                            onClick={() => setSignInModalOpen(true)}
-                        >
-                            Sign in
+        <nav className="w-full bg-white shadow-md py-4 px-2 sm:px-8 flex justify-between items-center fixed top-0 left-0 right-0 z-50">
+            <div className="text-2xl font-semibold text-dark-blue flex items-center">
+                Health AI
+                <img src={BackImage} width={25} alt="Logo" />
+            </div>
+            <ul className="flex space-x-6 text-gray-600">
+                <li>
+                    <Link to="/dashboard" className="hover:text-bright-blue transition duration-300">
+                        Home
+                    </Link>
+                </li>
+                <li>
+                    <Link to="/about" className="hover:text-bright-blue transition duration-300">
+                        About
+                    </Link>
+                </li>
+                <li>
+                    <Link to="/contact" className="hover:text-bright-blue transition duration-300">
+                        Contact
+                    </Link>
+                </li>
+            </ul>
+            <div className="flex items-center">
+                {user ? (
+                    <div className="flex items-center gap-2">
+                        <Avatar alt={user.name} src={user.picture} />
+                        <Button variant="outlined" size="small" onClick={handleSignOut}>
+                            Sign Out
                         </Button>
-                    )}
-                </div>
-            </nav>
-
-            {/* Модальное окно для регистрации (вместо GoogleLogin) */}
-            <Modal
-                open={signInModalOpen}
-                onClose={() => setSignInModalOpen(false)}
-                aria-labelledby="auth-modal-title"
-                aria-describedby="auth-modal-description"
-            >
-                <Box
-                    sx={{
-                        position: 'absolute',
-                        top: '50%',
-                        left: '50%',
-                        transform: 'translate(-50%, -50%)',
-                        width: 400,
-                        bgcolor: 'background.paper',
-                        boxShadow: 24,
-                        p: 4,
-                        borderRadius: 2,
-                    }}
-                >
-                    {/* Здесь вставляем RegistrationForm */}
-                    <RegistrationForm />
-                </Box>
-            </Modal>
-        </GoogleOAuthProvider>
+                    </div>
+                ) : (
+                    <Button
+                        startIcon={<CgLogIn />}
+                        variant="outlined"
+                        onClick={() => navigate('/register')}
+                    >
+                        Sign in
+                    </Button>
+                )}
+            </div>
+        </nav>
     );
 };
 
 const Home: React.FC = () => {
     const navigate = useNavigate();
     const [user, setUser] = useState<any>(null);
-    const [signInModalOpen, setSignInModalOpen] = useState(false);
 
     // При загрузке страницы пытаемся загрузить данные пользователя из localStorage
     useEffect(() => {
@@ -173,8 +119,8 @@ const Home: React.FC = () => {
     // Обработчик нажатия на кнопку "Get started"
     const handleGetStartedClick = () => {
         if (!user) {
-            // Если пользователь не авторизован — открываем модальное окно для регистрации
-            setSignInModalOpen(true);
+            // Если пользователь не авторизован — переходим на страницу регистрации
+            navigate('/register');
         } else {
             // Если авторизован — переходим на страницу dashboard
             navigate('/dashboard');
@@ -184,12 +130,7 @@ const Home: React.FC = () => {
     return (
         <div style={{ backgroundColor: '#d0e7ff' }} className="min-h-screen">
             <div className="h-screen flex flex-col items-center justify-center bg-gradient-to-b text-gray-800 p-4">
-                <Navbar
-                    user={user}
-                    setUser={setUser}
-                    signInModalOpen={signInModalOpen}
-                    setSignInModalOpen={setSignInModalOpen}
-                />
+                <Navbar user={user} setUser={setUser} />
 
                 <div className="pt-20 flex flex-col items-center">
                     <h1
@@ -209,25 +150,19 @@ const Home: React.FC = () => {
 
                     <div className="flex flex-col sm:flex-row gap-6 mb-10" id="features">
                         <div className="bg-white p-6 rounded-lg max-w-xs text-center shadow-md">
-                            <h3 className="text-xl font-medium mb-3 text-dark-blue">
-                                Personalized Prescription
-                            </h3>
+                            <h3 className="text-xl font-medium mb-3 text-dark-blue">Personalized Prescription</h3>
                             <p className="text-gray-600">
                                 Receive tailored medication recommendations specifically designed for your needs.
                             </p>
                         </div>
                         <div className="bg-white p-6 rounded-lg max-w-xs text-center shadow-md">
-                            <h3 className="text-xl font-medium mb-3 text-dark-blue">
-                                Health Monitoring
-                            </h3>
+                            <h3 className="text-xl font-medium mb-3 text-dark-blue">Health Monitoring</h3>
                             <p className="text-gray-600">
                                 Stay informed about your health with real-time monitoring and AI-driven insights.
                             </p>
                         </div>
                         <div className="bg-white p-6 rounded-lg max-w-xs text-center shadow-md">
-                            <h3 className="text-xl font-medium mb-3 text-dark-blue">
-                                Advanced AI Support
-                            </h3>
+                            <h3 className="text-xl font-medium mb-3 text-dark-blue">Advanced AI Support</h3>
                             <p className="text-gray-600">
                                 Utilize AI support to ensure you're following the best routines for a healthier lifestyle.
                             </p>
@@ -239,7 +174,6 @@ const Home: React.FC = () => {
                         <BouncingArrow />
                     </div>
 
-                    {/* Обёртка кнопки, которая видна сразу */}
                     <div id="button-wrapper" className="flex justify-center mt-6">
                         <button
                             id="button"
