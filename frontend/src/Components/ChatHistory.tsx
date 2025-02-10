@@ -32,9 +32,9 @@ const ChatHistory: React.FC = () => {
         }
     }, []);
 
-    // При клике переходим на HomePage и передаём выбранный чат через state.
+    // При клике перенаправляем пользователя на /dashboard/chat/{chatId}
     const handleClick = (item: ChatHistoryItem) => {
-        navigate('/dashboard', { state: { selectedChat: item } });
+        navigate(`/dashboard/chat/${item.id}`, { state: { selectedChat: item } });
     };
 
     return (
@@ -47,8 +47,7 @@ const ChatHistory: React.FC = () => {
                 <ul style={{ listStyleType: 'none', padding: 0 }}>
                     {history.map((item) => {
                         // Извлекаем первую строку из сохранённого чата.
-                        // Предполагаем, что чат хранится в формате:
-                        // "User: <вопрос>\nBot: <ответ>\n..."
+                        // Предполагаем, что чат хранится в формате: "User: <вопрос>\nBot: <ответ>\n..."
                         const lines = item.chat.split("\n");
                         let firstUserMessage = lines[0];
                         if (firstUserMessage.startsWith("User:")) {

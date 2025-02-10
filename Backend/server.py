@@ -1,5 +1,5 @@
 import time
-import re  # Импортируем модуль для работы с регулярными выражениями
+import re
 
 # Сохраняем оригинальную функцию time.time
 _real_time = time.time
@@ -29,7 +29,6 @@ DATABASE_CONFIG = {
 # Подключение к базе данных
 try:
     conn = psycopg2.connect(**DATABASE_CONFIG)
-    cursor = conn.cursor(cursor_factory=RealDictCursor)
     print("Подключение к базе данных успешно установлено")
 except Exception as e:
     print(f"Ошибка подключения к базе данных: {e}")
@@ -47,15 +46,16 @@ CLIENT_ID = "532143017111-4eqtlp0oejqaovj6rf5l1ergvhrp4vao.apps.googleuserconten
 
 def save_user_to_db(name, email, google_id=None, password=None):
     try:
-        cursor.execute(
-            """
-            INSERT INTO users (name, email, google_id, password)
-            VALUES (%s, %s, %s, %s)
-            ON CONFLICT (email) DO NOTHING
-            """,
-            (name, email, google_id, password)
-        )
-        conn.commit()
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                INSERT INTO users (name, email, google_id, password)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (email) DO NOTHING
+                """,
+                (name, email, google_id, password)
+            )
+            conn.commit()
         print(f"User {name} ({email}) saved successfully!")
     except Exception as e:
         print(f"Error saving user to database: {e}")
@@ -89,10 +89,11 @@ def register():
     if not all([name, email, password]):
         return jsonify({'error': 'All fields are required'}), 400
     try:
-        cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
-        existing_user = cursor.fetchone()
-        if existing_user:
-            return jsonify({'error': 'User already exists'}), 409
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT * FROM users WHERE email = %s", (email,))
+            existing_user = cur.fetchone()
+            if existing_user:
+                return jsonify({'error': 'User already exists'}), 409
         save_user_to_db(name=name, email=email, password=password)
         return jsonify({'message': 'User registered successfully'}), 201
     except Exception as e:
@@ -107,13 +108,13 @@ def login():
     if not all([email, password]):
         return jsonify({'error': 'Email and password are required'}), 400
     try:
-        cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
-        user = cursor.fetchone()
-        if not user:
-            return jsonify({'error': 'Invalid credentials'}), 401
-        # Сравнение простым текстом — в production используйте хэширование!
-        if user.get('password') != password:
-            return jsonify({'error': 'Invalid credentials'}), 401
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT * FROM users WHERE email = %s", (email,))
+            user = cur.fetchone()
+            if not user:
+                return jsonify({'error': 'Invalid credentials'}), 401
+            if user.get('password') != password:
+                return jsonify({'error': 'Invalid credentials'}), 401
         return jsonify({'message': 'Login successful', 'user': {'name': user.get('name'), 'email': user.get('email')}}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -142,31 +143,42 @@ def chat():
     best_answer = re.sub(r'(\d\.\s)', r'\n\n\1', best_answer)
     best_answer = re.sub(r':\s-', r':\n-', best_answer)
 
-    # Сохраняем в базу данных только текстовый ответ
+    # Если chatId передан, обновляем существующий чат, иначе создаем новый чат
     if chat_id:
         try:
-            cursor.execute("SELECT chat FROM chat_history WHERE id = %s", (chat_id,))
-            existing_chat = cursor.fetchone()
-            if existing_chat:
-                updated_chat = existing_chat['chat'] + f"\nUser: {query}\nBot: {best_answer}"
-                cursor.execute("UPDATE chat_history SET chat = %s WHERE id = %s", (updated_chat, chat_id))
-                conn.commit()
-            else:
-                cursor.execute("INSERT INTO chat_history (user_email, chat) VALUES (%s, %s)",
-                               (user_email, f"User: {query}\nBot: {best_answer}"))
-                conn.commit()
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT chat FROM chat_history WHERE id = %s", (chat_id,))
+                existing_chat = cur.fetchone()
+                if existing_chat:
+                    updated_chat = existing_chat['chat'] + f"\nUser: {query}\nBot: {best_answer}"
+                    cur.execute("UPDATE chat_history SET chat = %s WHERE id = %s", (updated_chat, chat_id))
+                    conn.commit()
+                else:
+                    with conn.cursor(cursor_factory=RealDictCursor) as cur2:
+                        cur2.execute(
+                            "INSERT INTO chat_history (user_email, chat) VALUES (%s, %s) RETURNING id",
+                            (user_email, f"User: {query}\nBot: {best_answer}")
+                        )
+                        new_chat_id = cur2.fetchone()['id']
+                        conn.commit()
+                        chat_id = new_chat_id
         except Exception as e:
             return jsonify({'error': str(e)}), 500
     else:
         try:
-            cursor.execute("INSERT INTO chat_history (user_email, chat) VALUES (%s, %s)",
-                           (user_email, f"User: {query}\nBot: {best_answer}"))
-            conn.commit()
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    "INSERT INTO chat_history (user_email, chat) VALUES (%s, %s) RETURNING id",
+                    (user_email, f"User: {query}\nBot: {best_answer}")
+                )
+                new_chat_id = cur.fetchone()['id']
+                conn.commit()
+                chat_id = new_chat_id
         except Exception as e:
             return jsonify({'error': str(e)}), 500
 
-    # Возвращаем только текстовый ответ (без дополнительных данных)
-    return jsonify({'response': {'best_answer': best_answer, 'model': 'Mistral Small Vector'}}), 200
+    # Возвращаем текстовый ответ и новый chatId, если чат был создан
+    return jsonify({'response': {'best_answer': best_answer, 'model': 'Mistral Small Vector', 'chatId': chat_id}}), 200
 
 # Эндпоинт для получения истории чатов конкретного пользователя
 @app.route('/api/chat_history', methods=['GET'])
@@ -175,11 +187,12 @@ def get_chat_history():
     if not user_email:
         return jsonify({'error': 'User email is required'}), 400
     try:
-        cursor.execute(
-            "SELECT id, chat, created_at FROM chat_history WHERE user_email = %s ORDER BY created_at DESC",
-            (user_email,)
-        )
-        history = cursor.fetchall()
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                "SELECT id, chat, created_at FROM chat_history WHERE user_email = %s ORDER BY created_at DESC",
+                (user_email,)
+            )
+            history = cur.fetchall()
         return jsonify({'history': history}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -191,8 +204,9 @@ def chat_history_detail():
     if not chat_id:
         return jsonify({'error': 'Chat id is required'}), 400
     try:
-        cursor.execute("SELECT id, chat, created_at FROM chat_history WHERE id = %s", (chat_id,))
-        chat = cursor.fetchone()
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT id, chat, created_at FROM chat_history WHERE id = %s", (chat_id,))
+            chat = cur.fetchone()
         if not chat:
             return jsonify({'error': 'Chat not found'}), 404
         return jsonify({'chat': chat}), 200

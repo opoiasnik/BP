@@ -1,47 +1,46 @@
-import React, { useEffect, useState } from 'react'
-import { IoMdHome } from "react-icons/io";
-import { GoHistory } from "react-icons/go";
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MdOutlineDarkMode } from "react-icons/md";
-import { CiLight } from "react-icons/ci";
 import IconButton from '@mui/material/IconButton';
 import Avatar from '@mui/material/Avatar';
+import { MdAddCircleOutline, MdOutlineDarkMode } from "react-icons/md";
+import { GoHistory } from "react-icons/go";
+import { CiLight } from "react-icons/ci";
 import { CgLogIn } from "react-icons/cg";
-import BackImage from '../assets/smallheadicon.png'
+import BackImage from '../assets/smallheadicon.png';
 
 export interface NavigationItem {
-    icon: React.ReactNode,
-    title: string,
-    link: string
+    icon: React.ReactNode;
+    title: string;
+    link: string;
 }
 
 const NavigationItems: NavigationItem[] = [
     {
-        title: 'Dashboard',
-        link: '/dashboard',
-        icon: <IoMdHome size={30} />
+        title: 'New Chat',
+        link: '/dashboard/new-chat', // Перенаправляем сразу на новый чат
+        icon: <MdAddCircleOutline size={30} />
     },
     {
         title: 'History',
         link: '/dashboard/history',
         icon: <GoHistory size={25} />
     }
-]
+];
 
 interface NavigationProps {
-    isExpanded: boolean,
+    isExpanded: boolean;
 }
 
 const Navigation = ({ isExpanded = false }: NavigationProps) => {
-    const [theme, setTheme] = useState<'dark' | 'light'>('light')
+    const [theme, setTheme] = useState<'dark' | 'light'>('light');
 
     useEffect(() => {
         if (window.matchMedia('(prefers-color-scheme:dark)').matches) {
             setTheme('dark');
         } else {
-            setTheme('light')
+            setTheme('light');
         }
-    }, [])
+    }, []);
 
     useEffect(() => {
         if (theme === "dark") {
@@ -49,11 +48,11 @@ const Navigation = ({ isExpanded = false }: NavigationProps) => {
         } else {
             document.documentElement.classList.remove("dark");
         }
-    }, [theme])
+    }, [theme]);
 
     const handleThemeSwitch = () => {
-        setTheme(theme === "dark" ? "light" : "dark")
-    }
+        setTheme(theme === "dark" ? "light" : "dark");
+    };
 
     // Загружаем данные пользователя из localStorage (если имеются)
     const [user, setUser] = useState<any>(null);
@@ -70,7 +69,7 @@ const Navigation = ({ isExpanded = false }: NavigationProps) => {
                 <div className='flex flex-col items-start gap-12'>
                     <Link to='/' className='w-full flex items-center justify-center'>
                         <IconButton sx={{ width: 40, height: 40 }}>
-                            <img src={BackImage} width={25} alt="" />
+                            <img src={BackImage} width={25} alt="Back" />
                         </IconButton>
                         {isExpanded && (
                             <p className='text-2xl font-semibold text-dark-blue flex items-center'>
@@ -80,7 +79,11 @@ const Navigation = ({ isExpanded = false }: NavigationProps) => {
                     </Link>
                     <div className='flex flex-col p-1 gap-5 items-center'>
                         {NavigationItems.map((item) => (
-                            <Link key={item.link} to={item.link} className='flex gap-2 items-center w-full'>
+                            <Link
+                                key={item.link}
+                                to={item.link}
+                                className='flex gap-2 items-center w-full'
+                            >
                                 <IconButton
                                     sx={{
                                         width: 40,
@@ -129,7 +132,7 @@ const Navigation = ({ isExpanded = false }: NavigationProps) => {
                                 borderRadius: 2,
                                 background: theme === 'dark' ? 'white' : 'initial',
                                 '&:focus-visible': {
-                                    outline: '2px solid blue', // Кастомный стиль фокуса
+                                    outline: '2px solid blue',
                                     outlineOffset: '0px',
                                     borderRadius: '4px',
                                 },
@@ -142,7 +145,7 @@ const Navigation = ({ isExpanded = false }: NavigationProps) => {
                 </div>
             </div>
         </div>
-    )
-}
+    );
+};
 
 export default Navigation;
