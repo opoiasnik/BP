@@ -28,36 +28,60 @@ const HomePage: React.FC = () => {
 
     useEffect(() => {
         if (!isNewChat && selectedChat && selectedChat.chat) {
-            const lines = selectedChat.chat.split('\n');
-            const messages: ChatMessage[] = [];
-            let currentMessage: ChatMessage | null = null;
-
-            lines.forEach((line) => {
-                const trimmed = line.trim();
-                if (trimmed.startsWith('User:')) {
-                    if (currentMessage) {
-                        messages.push(currentMessage);
-                    }
-                    currentMessage = { sender: 'User', text: trimmed.replace(/^User:\s*/, '') };
-                } else if (trimmed.startsWith('Bot:')) {
-                    if (currentMessage) {
-                        messages.push(currentMessage);
-                    }
-                    currentMessage = { sender: 'Assistant', text: trimmed.replace(/^Bot:\s*/, '') };
-                } else {
-                    if (currentMessage) {
-                        currentMessage.text += ' ' + trimmed;
-                    }
-                }
-            });
-            if (currentMessage) {
-                messages.push(currentMessage);
-            }
+            const messages: ChatMessage[] = selectedChat.chat
+                .split(/(?=^(User:|Bot:))/m)
+                .map((msg) => {
+                    const trimmed = msg.trim();
+                    const sender = trimmed.startsWith('User:') ? 'User' : 'Assistant';
+                    return {
+                        sender,
+                        text: trimmed.replace(/^User:|^Bot:/, '').trim(),
+                    };
+                });
             setChatHistory(messages);
         } else {
             setChatHistory([]);
         }
     }, [isNewChat, selectedChat]);
+
+    /**
+     * Функция форматирования сообщения.
+     * Если в ответе отсутствуют символы перевода строки, пытаемся разбить текст по нумерованным пунктам.
+     */
+    const formatMessage = (text: string) => {
+        let lines: string[] = [];
+
+        if (text.includes('\n')) {
+            lines = text.split('\n');
+        } else {
+            lines = text.split(/(?=\d+\.\s+)/);
+        }
+
+        lines = lines.map((line) => line.trim()).filter((line) => line !== '');
+        if (lines.length === 0) return null;
+
+        return lines.map((line, index) => {
+            if (/^\d+\.\s*/.test(line)) {
+                const colonIndex = line.indexOf(':');
+                if (colonIndex !== -1) {
+                    const firstPart = line.substring(0, colonIndex);
+                    const rest = line.substring(colonIndex + 1);
+                    return (
+                        <div key={index} className="mb-1">
+                            <strong>{firstPart.trim()}</strong>: {rest.trim()}
+                        </div>
+                    );
+                } else {
+                    return (
+                        <div key={index} className="mb-1">
+                            <strong>{line}</strong>
+                        </div>
+                    );
+                }
+            }
+            return <div key={index}>{line}</div>;
+        });
+    };
 
     const onSubmit = async () => {
         if (!message.trim()) return;
@@ -113,81 +137,73 @@ const HomePage: React.FC = () => {
 
     return (
         <div className="flex flex-col justify-end items-center p-4 gap-8 h-full w-full">
-            <div className="w-full p-2  rounded overflow-y-auto h-full mb-4">
+            <div className="w-full p-2 rounded overflow-y-auto h-full mb-4">
                 {chatHistory.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full">
                         <h1 className="text-xl">Start a New Chat</h1>
                     </div>
                 ) : (
-                    chatHistory.map((msg, index) => (
-                        <div
-                            key={index}
-                            className={`flex mb-2 ${msg.sender === 'User' ? 'justify-end' : 'justify-start items-start'}`}
-                        >
-                            {msg.sender === 'Assistant' && (
-                                <img
-                                    src={callCenterIcon}
-                                    alt="Call Center Icon"
-                                    className="w-6 h-6 mr-2"
-                                />
-                            )}
+                    chatHistory.map((msg, index) => {
+                        const formattedMessage = formatMessage(msg.text);
+                        if (!formattedMessage) return null;
+                        return (
                             <div
-                                className={`p-3 rounded-lg max-w-md flex ${
-                                    msg.sender === 'User'
-                                        ? 'bg-blue-500 text-white'
-                                        : 'bg-gray-200 text-gray-800'
-                                }`}
-                                style={{ whiteSpace: 'normal' }}
+                                key={index}
+                                className={`flex mb-2 ${msg.sender === 'User' ? 'justify-end' : 'justify-start items-start'}`}
                             >
-                                {msg.text.split('\n').map((line, i) => (
-                                    <p key={i}>{line}</p>
-                                ))}
+                                {msg.sender === 'Assistant' && (
+                                    <img
+                                        src={callCenterIcon}
+                                        alt="Call Center Icon"
+                                        className="w-6 h-6 mr-2"
+                                    />
+                                )}
+                                <div
+                                    className={`p-3 rounded-lg max-w-md ${
+                                        msg.sender === 'User'
+                                            ? 'bg-blue-500 text-white'
+                                            : 'bg-gray-200 text-gray-800'
+                                    }`}
+                                >
+                                    {formattedMessage}
+                                </div>
                             </div>
-                        </div>
-                    ))
+                        );
+                    })
                 )}
 
                 {(isLoading || isFetching) && (
                     <div className="flex mb-2 justify-start items-start">
-                        <img
-                            src={callCenterIcon}
-                            alt="Call Center Icon"
-                            className="w-6 h-6 mr-2"
-                        />
-                        <div
-                            className="p-3 rounded-lg max-w-md flex bg-gray-200 text-gray-800"
-                            style={{ whiteSpace: 'normal' }}
-                        >
-                            <div className="flex items-center">
-                                <svg
-                                    className="animate-spin h-5 w-5 mr-3 text-gray-500"
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                >
-                                    <circle
-                                        className="opacity-25"
-                                        cx="12"
-                                        cy="12"
-                                        r="10"
-                                        stroke="currentColor"
-                                        strokeWidth="4"
-                                    ></circle>
-                                    <path
-                                        className="opacity-75"
-                                        fill="currentColor"
-                                        d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-                                    ></path>
-                                </svg>
-                                <span>Assistant is typing...</span>
-                            </div>
+                        <img src={callCenterIcon} alt="Call Center Icon" className="w-6 h-6 mr-2" />
+                        <div className="p-3 rounded-lg max-w-md bg-gray-200 text-gray-800 flex items-center">
+                            <svg
+                                className="animate-spin h-5 w-5 mr-3 text-gray-500"
+                                xmlns="http://www.w3.org/2000/svg"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                            >
+                                <circle
+                                    className="opacity-25"
+                                    cx="12"
+                                    cy="12"
+                                    r="10"
+                                    stroke="currentColor"
+                                    strokeWidth="4"
+                                ></circle>
+                                <path
+                                    className="opacity-75"
+                                    fill="currentColor"
+                                    d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                                ></path>
+                            </svg>
+                            <span>Assistant is typing...</span>
                         </div>
                     </div>
                 )}
 
                 <div ref={messagesEndRef} />
             </div>
-            
+
             <div className="w-2/3 mb-20">
                 <div className="flex">
                     <input
