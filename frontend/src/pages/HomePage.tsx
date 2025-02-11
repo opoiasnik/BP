@@ -1,8 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import gsap from 'gsap';
 import { useLazySendChatQuestionQuery } from '../store/api/chatApi';
-import AssistantIcon from '../assets/call-center.png'; // Импорт иконки ассистента
+import callCenterIcon from '../assets/call-center.png';
 
 interface ChatMessage {
     sender: string;
@@ -11,73 +10,85 @@ interface ChatMessage {
 
 const HomePage: React.FC = () => {
     const [sendChatQuestion, { isLoading, isFetching }] = useLazySendChatQuestionQuery();
-    const [message, setMessage] = useState<string>('');
+    const [message, setMessage] = useState('');
     const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+    const messagesEndRef = useRef<HTMLDivElement>(null);
 
     const location = useLocation();
     const navigate = useNavigate();
     const state = (location.state as any) || {};
 
     const isNewChat = state.newChat === true;
-    const selectedChat = state.selectedChat
-        ? (state.selectedChat as { id: number; chat: string; created_at: string })
-        : null;
+    const selectedChat = state.selectedChat || null;
     const selectedChatId = selectedChat ? selectedChat.id : null;
 
     useEffect(() => {
-        if (isNewChat) {
-            setChatHistory([]);
-        } else if (selectedChat) {
-            const lines = selectedChat.chat.split('\n').filter((line) => line.trim() !== '');
-            const loadedChatHistory = lines.map((line) => {
-                if (line.startsWith('User:')) {
-                    return { sender: 'User', text: line.replace('User:', '').trim() };
-                } else if (line.startsWith('Bot:')) {
-                    return { sender: 'Assistant', text: line.replace('Bot:', '').trim() };
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [chatHistory, isLoading, isFetching]);
+
+    useEffect(() => {
+        if (!isNewChat && selectedChat && selectedChat.chat) {
+            const lines = selectedChat.chat.split('\n');
+            const messages: ChatMessage[] = [];
+            let currentMessage: ChatMessage | null = null;
+
+            lines.forEach((line) => {
+                const trimmed = line.trim();
+                if (trimmed.startsWith('User:')) {
+                    if (currentMessage) {
+                        messages.push(currentMessage);
+                    }
+                    currentMessage = { sender: 'User', text: trimmed.replace(/^User:\s*/, '') };
+                } else if (trimmed.startsWith('Bot:')) {
+                    if (currentMessage) {
+                        messages.push(currentMessage);
+                    }
+                    currentMessage = { sender: 'Assistant', text: trimmed.replace(/^Bot:\s*/, '') };
                 } else {
-                    return { sender: 'Info', text: line.trim() };
+                    if (currentMessage) {
+                        currentMessage.text += ' ' + trimmed;
+                    }
                 }
             });
-            setChatHistory(loadedChatHistory);
+            if (currentMessage) {
+                messages.push(currentMessage);
+            }
+            setChatHistory(messages);
+        } else {
+            setChatHistory([]);
         }
     }, [isNewChat, selectedChat]);
 
-    async function onSubmit() {
+    const onSubmit = async () => {
         if (!message.trim()) return;
-
-        const newUserMessage: ChatMessage = { sender: 'User', text: message };
-        setChatHistory((prev) => [...prev, newUserMessage]);
-        const userMessage = message;
+        const userMessage = message.trim();
         setMessage('');
+        setChatHistory((prev) => [...prev, { sender: 'User', text: userMessage }]);
 
         const storedUser = localStorage.getItem('user');
         const email = storedUser ? JSON.parse(storedUser).email : '';
-
-        const question = selectedChatId
+        const payload = selectedChatId
             ? { query: userMessage, chatId: selectedChatId, email }
             : { query: userMessage, email };
 
         try {
-            const res = await sendChatQuestion(question).unwrap();
-
+            const res = await sendChatQuestion(payload).unwrap();
             let bestAnswer = res.response.best_answer;
             if (typeof bestAnswer !== 'string') {
                 bestAnswer = String(bestAnswer);
             }
-            bestAnswer = bestAnswer
-                .replace(/[*#]/g, '')
-                .replace(/(\d\.\s)/g, '\n\n$1')
-                .replace(/:\s-/g, ':\n-');
+            bestAnswer = bestAnswer.trim();
 
-            const assistantMessage: ChatMessage = {
-                sender: 'Assistant',
-                text: bestAnswer,
-            };
-
-            setChatHistory((prev) => [...prev, assistantMessage]);
+            if (bestAnswer) {
+                setChatHistory((prev) => [...prev, { sender: 'Assistant', text: bestAnswer }]);
+            }
 
             if (!selectedChatId && res.response.chatId) {
-                const chatString = chatHistory
+                const updatedChatHistory = [...chatHistory, { sender: 'User', text: userMessage }];
+                if (bestAnswer) {
+                    updatedChatHistory.push({ sender: 'Assistant', text: bestAnswer });
+                }
+                const chatString = updatedChatHistory
                     .map((msg) => (msg.sender === 'User' ? 'User: ' : 'Bot: ') + msg.text)
                     .join('\n');
                 navigate(`/dashboard/chat/${res.response.chatId}`, {
@@ -98,46 +109,35 @@ const HomePage: React.FC = () => {
                 { sender: 'Assistant', text: 'Что-то пошло не так' },
             ]);
         }
-    }
-
-    const groupedMessages = chatHistory.reduce((acc: { sender: string; text: string }[], message) => {
-        const lastGroup = acc[acc.length - 1];
-        if (lastGroup && lastGroup.sender === message.sender) {
-            lastGroup.text += `\n${message.text}`;
-        } else {
-            acc.push({ sender: message.sender, text: message.text });
-        }
-        return acc;
-    }, []);
+    };
 
     return (
-        <div className="w-full h-full flex flex-col justify-end items-center p-4 gap-8">
-            <div className="w-full overflow-y-auto no-scrollbar h-full p-2 border-gray-200 mb-4">
-                {groupedMessages.length > 0 ? (
-                    groupedMessages.map((msg, index) => (
+        <div className="flex flex-col justify-end items-center p-4 gap-8 h-full w-full">
+            <div className="w-full p-2  rounded overflow-y-auto h-full mb-4">
+                {chatHistory.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full">
+                        <h1 className="text-xl">Start a New Chat</h1>
+                    </div>
+                ) : (
+                    chatHistory.map((msg, index) => (
                         <div
                             key={index}
-                            className={`flex ${
-                                msg.sender === 'User' ? 'justify-end' : 'justify-start'
-                            } mb-2 items-start`}
+                            className={`flex mb-2 ${msg.sender === 'User' ? 'justify-end' : 'justify-start items-start'}`}
                         >
                             {msg.sender === 'Assistant' && (
-                                <div className="flex items-start">
-                                    <img
-                                        src={AssistantIcon}
-                                        alt="Assistant Icon"
-                                        className="w-12 h-12 mr-3 rounded-full object-cover"
-                                        style={{ flexShrink: 0 }}
-                                    />
-                                </div>
+                                <img
+                                    src={callCenterIcon}
+                                    alt="Call Center Icon"
+                                    className="w-6 h-6 mr-2"
+                                />
                             )}
                             <div
-                                className={`p-3 rounded-lg max-w-md ${
+                                className={`p-3 rounded-lg max-w-md flex ${
                                     msg.sender === 'User'
                                         ? 'bg-blue-500 text-white'
                                         : 'bg-gray-200 text-gray-800'
                                 }`}
-                                style={{ whiteSpace: 'pre-wrap' }}
+                                style={{ whiteSpace: 'normal' }}
                             >
                                 {msg.text.split('\n').map((line, i) => (
                                     <p key={i}>{line}</p>
@@ -145,45 +145,63 @@ const HomePage: React.FC = () => {
                             </div>
                         </div>
                     ))
-                ) : (
-                    <div className="w-full h-full items-center flex flex-col gap-2 justify-center">
-                        <h1 className="text-xl" id="firstheading">
-                            Start a New Chat
-                        </h1>
-                    </div>
                 )}
-                {(isLoading || isFetching) && (
-                    <div className="flex justify-start mb-2 items-start">
-                        <div className="flex items-start">
-                            <img
-                                src={AssistantIcon}
-                                alt="Assistant Icon"
-                                className="w-12 h-12 mr-3 rounded-full object-cover"
-                                style={{ flexShrink: 0 }}
-                            />
-                        </div>
-                        <div className="p-2 rounded-lg max-w-md bg-gray-200 text-gray-800">
-                            <p className="flex items-center">
-                                I'm thinking <span className="loader ml-2"></span>
-                            </p>
-                        </div>
-                    </div>
-                )}
-            </div>
 
-            <div id="input" className="w-2/3 rounded-xl drop-shadow-2xl mb-20">
+                {(isLoading || isFetching) && (
+                    <div className="flex mb-2 justify-start items-start">
+                        <img
+                            src={callCenterIcon}
+                            alt="Call Center Icon"
+                            className="w-6 h-6 mr-2"
+                        />
+                        <div
+                            className="p-3 rounded-lg max-w-md flex bg-gray-200 text-gray-800"
+                            style={{ whiteSpace: 'normal' }}
+                        >
+                            <div className="flex items-center">
+                                <svg
+                                    className="animate-spin h-5 w-5 mr-3 text-gray-500"
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <circle
+                                        className="opacity-25"
+                                        cx="12"
+                                        cy="12"
+                                        r="10"
+                                        stroke="currentColor"
+                                        strokeWidth="4"
+                                    ></circle>
+                                    <path
+                                        className="opacity-75"
+                                        fill="currentColor"
+                                        d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                                    ></path>
+                                </svg>
+                                <span>Assistant is typing...</span>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                <div ref={messagesEndRef} />
+            </div>
+            
+            <div className="w-2/3 mb-20">
                 <div className="flex">
                     <input
+                        type="text"
                         placeholder="Waiting for your question..."
                         value={message}
                         onChange={(e) => setMessage(e.target.value)}
-                        className="w-full px-5 py-2 rounded-l-xl outline-none"
-                        type="text"
+                        disabled={isLoading || isFetching}
+                        className="w-full px-5 py-2 rounded-l-xl outline-none border border-gray-300"
                     />
                     <button
-                        disabled={isLoading || isFetching}
                         onClick={onSubmit}
-                        className="bg-black rounded-r-xl px-4 py-2 text-white font-semibold hover:bg-slate-700"
+                        disabled={isLoading || isFetching}
+                        className="bg-black text-white font-semibold px-4 py-2 rounded-r-xl hover:bg-gray-800 disabled:opacity-50"
                     >
                         Send
                     </button>
