@@ -12,92 +12,80 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_elasticsearch import ElasticsearchStore
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.docstore.document import Document
-from googletrans import Translator  # Translator for final polishing
+# from googletrans import Translator
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Load configuration
 config_file_path = "config.json"
 with open(config_file_path, 'r') as config_file:
     config = json.load(config_file)
 
-# Load Mistral API key
 mistral_api_key = "hXDC4RBJk1qy5pOlrgr01GtOlmyCBaNs"
 if not mistral_api_key:
     raise ValueError("Mistral API key not found in configuration.")
 
 ###############################################################################
-#            Функция перевода всего текста на словацкий с логированием           #
+#            translate all answer to slovak(temporary closed :) )         #
 ###############################################################################
-translator = Translator()
-
+# translator = Translator()
 def translate_to_slovak(text: str) -> str:
     """
-    Переводит весь текст на словацкий, логируя текст до и после перевода,
-    а также выводит в лог слова, которые изменились (то есть, присутствуют только
-    в переведённом тексте).
+    Переводит весь текст на словацкий с логированием изменений.
+    Сейчас функция является заглушкой и возвращает исходный текст без изменений.
     """
-    if not text.strip():
-        return text
-
-    logger.info("Translation - Before: " + text)
-    try:
-        # 1) Перевод с исходного языка на английский
-        mid_result = translator.translate(text, src='auto', dest='en').text
-        # 2) Перевод с английского на словацкий
-        final_result = translator.translate(mid_result, src='en', dest='sk').text
-
-        logger.info("Translation - After: " + final_result)
-
-        # Сравнение слов до и после перевода
-        before_words = text.split()
-        after_words = final_result.split()
-        diff = list(difflib.ndiff(before_words, after_words))
-        changed_words = [word[2:] for word in diff if word.startswith('+ ')]
-        if changed_words:
-            logger.info("Changed words: " + ", ".join(changed_words))
-        else:
-            logger.info("No changed words detected.")
-
-        return final_result
-    except Exception as e:
-        logger.error(f"Translation error: {e}")
-        return text  # В случае ошибки возвращаем исходный текст
+    # if not text.strip():
+    #     return text
+    #
+    # logger.info("Translation - Before: " + text)
+    # try:
+    #     mid_result = translator.translate(text, src='auto', dest='en').text
+    #     final_result = translator.translate(mid_result, src='en', dest='sk').text
+    #     logger.info("Translation - After: " + final_result)
+    #     before_words = text.split()
+    #     after_words = final_result.split()
+    #     diff = list(difflib.ndiff(before_words, after_words))
+    #     changed_words = [word[2:] for word in diff if word.startswith('+ ')]
+    #     if changed_words:
+    #         logger.info("Changed words: " + ", ".join(changed_words))
+    #     else:
+    #         logger.info("No changed words detected.")
+    #     return final_result
+    # except Exception as e:
+    #     logger.error(f"Translation error: {e}")
+    #     return text
+    return text
 
 ###############################################################################
 #   Функция перевода описания лекарства с сохранением названия (до двоеточия)    #
 ###############################################################################
 def translate_preserving_medicine_names(text: str) -> str:
     """
-    Ищет в тексте строки вида:
-      "номер. Название лекарства: описание..."
-    и переводит только описание (часть после двоеточия), оставляя название без изменений.
-    Если строка не соответствует шаблону, переводится весь текст.
-    Логируются исходное описание, переведённое и изменённые слова.
+    Ищет строки вида "номер. Название лекарства: описание..." и переводит только описание,
+    оставляя название без изменений.
+    Сейчас функция является заглушкой и возвращает исходный текст без изменений.
     """
-    # Регулярное выражение для строк вида "1. Название лекарства: описание..."
-    pattern = re.compile(r'^(\d+\.\s*[^:]+:\s*)(.*)$', re.MULTILINE)
-
-    def replacer(match):
-        prefix = match.group(1)  # номер и название с двоеточием
-        description = match.group(2)  # описание для перевода
-        logger.info("Translating description: " + description)
-        translated_description = translate_to_slovak(description)
-        logger.info("Translated description: " + translated_description)
-        # Определяем изменения для описания
-        diff = list(difflib.ndiff(description.split(), translated_description.split()))
-        changed_words = [word[2:] for word in diff if word.startswith('+ ')]
-        if changed_words:
-            logger.info("Changed words in description: " + ", ".join(changed_words))
-        else:
-            logger.info("No changed words in description detected.")
-        return prefix + translated_description
-
-    if pattern.search(text):
-        return pattern.sub(replacer, text)
-    else:
-        return translate_to_slovak(text)
+    # pattern = re.compile(r'^(\d+\.\s*[^:]+:\s*)(.*)$', re.MULTILINE)
+    #
+    # def replacer(match):
+    #     prefix = match.group(1)
+    #     description = match.group(2)
+    #     logger.info("Translating description: " + description)
+    #     translated_description = translate_to_slovak(description)
+    #     logger.info("Translated description: " + translated_description)
+    #     diff = list(difflib.ndiff(description.split(), translated_description.split()))
+    #     changed_words = [word[2:] for word in diff if word.startswith('+ ')]
+    #     if changed_words:
+    #         logger.info("Changed words in description: " + ", ".join(changed_words))
+    #     else:
+    #         logger.info("No changed words in description detected.")
+    #     return prefix + translated_description
+    #
+    # if pattern.search(text):
+    #     return pattern.sub(replacer, text)
+    # else:
+    #     return translate_to_slovak(text)
+    return text
 
 ###############################################################################
 #                             Custom Mistral LLM                              #
@@ -128,7 +116,7 @@ class CustomMistralLLM:
                 logger.info(f"Full response from model {self.model_name}: {result}")
                 return result.get("choices", [{}])[0].get("message", {}).get("content", "No response")
             except HTTPError as e:
-                if response.status_code == 429:  # Too Many Requests
+                if response.status_code == 429:
                     logger.warning(f"Rate limit exceeded. Waiting {delay} seconds before retry.")
                     time.sleep(delay)
                     attempt += 1
@@ -191,11 +179,9 @@ def evaluate_results(query, summaries, model_name):
     total_score = 0
     explanation = []
     for i, summary in enumerate(summaries):
-        # Оценка по длине текста
         length_score = min(len(summary) / 100, 10)
         total_score += length_score
         explanation.append(f"Document {i+1}: Length score - {length_score}")
-        # Оценка на основе совпадений ключевых слов
         keyword_matches = sum(1 for word in query_keywords if word.lower() in summary.lower())
         keyword_score = min(keyword_matches * 2, 10)
         total_score += keyword_score
@@ -205,6 +191,32 @@ def evaluate_results(query, summaries, model_name):
     logger.info(f"Evaluation for model {model_name}: {final_score}/10")
     logger.info(f"Explanation:\n{explanation_summary}")
     return {"rating": round(final_score, 2), "explanation": explanation_summary}
+
+###############################################################################
+#             validation of recieved answer is it correct for user question                    #
+###############################################################################
+def validate_answer_logic(query: str, answer: str) -> str:
+    """
+    Проверяет, соответствует ли ответ логике вопроса.
+    Если, например, вопрос относится к ľudským liekom a obsahuje otázku na dávkovanie,
+    odpoveď musí obsahovať iba lieky vhodné pre ľudí s uvedením správneho dávkovania.
+    """
+    validation_prompt = (
+        f"Otázka: '{query}'\n"
+        f"Odpoveď: '{answer}'\n\n"
+        "Analyzuj prosím túto odpoveď. Ak odpoveď obsahuje odporúčania liekov, ktoré nie sú vhodné pre ľudí, "
+        "alebo ak neobsahuje správne informácie o dávkovaní, oprav ju tak, aby bola logicky konzistentná s otázkou. "
+        "Odpoveď musí obsahovať iba lieky určené pre ľudí a pri potrebe aj presné informácie o dávkovaní (napr. v gramoch). "
+        "Ak je odpoveď logická a korektná, vráť pôvodnú odpoveď bez zmien. "
+        "Odpovedz v slovenčine a iba čistou, konečnou odpoveďou bez ďalších komentárov."
+    )
+    try:
+        validated_answer = llm_small.generate_text(prompt=validation_prompt, max_tokens=500, temperature=0.5)
+        logger.info(f"Validated answer: {validated_answer}")
+        return validated_answer
+    except Exception as e:
+        logger.error(f"Error during answer validation: {e}")
+        return answer
 
 ###############################################################################
 #           Main function: process_query_with_mistral (Slovak prompt)         #
@@ -223,8 +235,10 @@ def process_query_with_mistral(query, k=10):
                 f"Otázka: '{query}'.\n"
                 "Na základe nasledujúcich informácií o liekoch:\n"
                 f"{vector_documents}\n\n"
-                "Prosím, uveďte tri najvhodnejšie lieky alebo riešenia. Pre každý liek uveďte jeho názov a stručné, jasné vysvetlenie, prečo je vhodný. "
-                "Odpovedajte priamo a ľudským, priateľským tónom v číslovanom zozname, bez nepotrebných úvodných fráz alebo opisu procesu. "
+                "Prosím, uveďte tri najvhodnejšie lieky alebo riešenia pre daný problém. "
+                "Pre každý liek uveďte jeho názov, stručné a jasné vysvetlenie, prečo je vhodný, a ak je to relevantné, "
+                "aj odporúčané dávkovanie (napr. v gramoch alebo v iných vhodných jednotkách). "
+                "Odpovedajte priamo a ľudským, priateľským tónom v číslovanom zozname, bez nepotrebných úvodných fráz. "
                 "Odpoveď musí byť v slovenčine."
             )
             summary_small_vector = llm_small.generate_text(prompt=vector_prompt, max_tokens=700, temperature=0.7)
@@ -252,8 +266,10 @@ def process_query_with_mistral(query, k=10):
                 f"Otázka: '{query}'.\n"
                 "Na základe nasledujúcich informácií o liekoch:\n"
                 f"{text_documents}\n\n"
-                "Prosím, uveďte tri najvhodnejšie lieky alebo riešenia. Pre každý liek uveďte jeho názov a stručné, jasné vysvetlenie, prečo je vhodný. "
-                "Odpovedajte priamo a ľudským, priateľským tónom v číslovanom zozname, bez nepotrebných úvodných fráz alebo opisu procesu. "
+                "Prosím, uveďte tri najvhodnejšie lieky alebo riešenia pre daný problém. "
+                "Pre každý liek uveďte jeho názov, stručné a jasné vysvetlenie, prečo je vhodný, a ak je to relevantné, "
+                "aj odporúčané dávkovanie (napr. v gramoch alebo v iných vhodných jednotkách). "
+                "Odpovedajte priamo a ľudským, priateľským tónom v číslovanom zozname, bez nepotrebných úvodných fráz. "
                 "Odpoveď musí byť v slovenčine."
             )
             summary_small_text = llm_small.generate_text(prompt=text_prompt, max_tokens=700, temperature=0.7)
@@ -269,7 +285,7 @@ def process_query_with_mistral(query, k=10):
             summary_small_text = ""
             summary_large_text = ""
 
-        # Combine all results and choose the best one
+        # Porovnanie výsledkov a výber najlepšieho
         all_results = [
             {"eval": small_vector_eval, "summary": summary_small_vector, "model": "Mistral Small Vector"},
             {"eval": large_vector_eval, "summary": summary_large_vector, "model": "Mistral Large Vector"},
@@ -278,8 +294,12 @@ def process_query_with_mistral(query, k=10):
         ]
         best_result = max(all_results, key=lambda x: x["eval"]["rating"])
         logger.info(f"Best result from model {best_result['model']} with score {best_result['eval']['rating']}.")
-        # Aplikujeme finálny preklad na odpoveď s popisom lieku, pričom názvy zostávajú nezmenené.
-        polished_answer = translate_preserving_medicine_names(best_result["summary"])
+
+        # Dodatočná kontrola logiky odpovede
+        validated_answer = validate_answer_logic(query, best_result["summary"])
+
+
+        polished_answer = translate_preserving_medicine_names(validated_answer)
         return {
             "best_answer": polished_answer,
             "model": best_result["model"],
@@ -292,3 +312,4 @@ def process_query_with_mistral(query, k=10):
             "best_answer": "An error occurred during query processing.",
             "error": str(e)
         }
+
