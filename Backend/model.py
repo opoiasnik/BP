@@ -26,34 +26,13 @@ if not mistral_api_key:
     raise ValueError("Mistral API key not found in configuration.")
 
 ###############################################################################
-#            translate all answer to slovak(temporary closed :) )         #
+#            translate all answer to slovak (temporary closed :)            #
 ###############################################################################
-# translator = Translator()
 def translate_to_slovak(text: str) -> str:
     """
-    Переводит весь текст на словацкий с логированием изменений.
+    Функция перевода на словацкий.
     Сейчас функция является заглушкой и возвращает исходный текст без изменений.
     """
-    # if not text.strip():
-    #     return text
-    #
-    # logger.info("Translation - Before: " + text)
-    # try:
-    #     mid_result = translator.translate(text, src='auto', dest='en').text
-    #     final_result = translator.translate(mid_result, src='en', dest='sk').text
-    #     logger.info("Translation - After: " + final_result)
-    #     before_words = text.split()
-    #     after_words = final_result.split()
-    #     diff = list(difflib.ndiff(before_words, after_words))
-    #     changed_words = [word[2:] for word in diff if word.startswith('+ ')]
-    #     if changed_words:
-    #         logger.info("Changed words: " + ", ".join(changed_words))
-    #     else:
-    #         logger.info("No changed words detected.")
-    #     return final_result
-    # except Exception as e:
-    #     logger.error(f"Translation error: {e}")
-    #     return text
     return text
 
 ###############################################################################
@@ -65,27 +44,33 @@ def translate_preserving_medicine_names(text: str) -> str:
     оставляя название без изменений.
     Сейчас функция является заглушкой и возвращает исходный текст без изменений.
     """
-    # pattern = re.compile(r'^(\d+\.\s*[^:]+:\s*)(.*)$', re.MULTILINE)
-    #
-    # def replacer(match):
-    #     prefix = match.group(1)
-    #     description = match.group(2)
-    #     logger.info("Translating description: " + description)
-    #     translated_description = translate_to_slovak(description)
-    #     logger.info("Translated description: " + translated_description)
-    #     diff = list(difflib.ndiff(description.split(), translated_description.split()))
-    #     changed_words = [word[2:] for word in diff if word.startswith('+ ')]
-    #     if changed_words:
-    #         logger.info("Changed words in description: " + ", ".join(changed_words))
-    #     else:
-    #         logger.info("No changed words in description detected.")
-    #     return prefix + translated_description
-    #
-    # if pattern.search(text):
-    #     return pattern.sub(replacer, text)
-    # else:
-    #     return translate_to_slovak(text)
     return text
+
+###############################################################################
+#        Формирование динамического промта для генерации ответа               #
+###############################################################################
+def build_dynamic_prompt(query: str, documents: list) -> str:
+    """
+    Формирует финальный промт, который инструктирует модель:
+      - проанализировать исходную вопрос пользователя и выявить дополнительные требования;
+      - если они есть, в ответе сначала предоставить рекомендации по лекарствам
+        (название, краткое объяснение и, если необходимо, дозировка или время приёма),
+      - затем, в отдельной части, дать ответ на дополнительные вопросы;
+      - если дополнительных требований нет – указать только рекомендации по лекарствам.
+    """
+    documents_str = "\n".join(documents)
+    prompt = (
+        f"Otázka: '{query}'.\n"
+        "Na základe nasledujúcich informácií o liekoch:\n"
+        f"{documents_str}\n\n"
+        "Analyzuj uvedenú otázku a zisti, či obsahuje dodatočné požiadavky okrem odporúčania liekov. "
+        "Ak áno, v odpovedi najprv uveď odporúčané lieky – pre každý liek uveď jeho názov, stručné vysvetlenie a, ak je to relevantné, "
+        "odporúčané dávkovanie alebo čas užívania, a potom v ďalšej časti poskytnú odpoveď na dodatočné požiadavky. "
+        "Ak dodatočné požiadavky nie sú prítomné, uveď len odporúčanie liekov. "
+        "Odpovedz priamo a ľudským, priateľským tónom v číslovanom zozname, bez zbytočných úvodných fráz. "
+        "Odpoveď musí byť v slovenčine."
+    )
+    return prompt
 
 ###############################################################################
 #                             Custom Mistral LLM                              #
@@ -172,42 +157,49 @@ llm_large = CustomMistralLLM(
 )
 
 ###############################################################################
-#                  Helper function to evaluate model output                   #
+#       Новая функция для детальной оценки логики и полноты ответа           #
 ###############################################################################
-def evaluate_results(query, summaries, model_name):
-    query_keywords = query.split()
-    total_score = 0
-    explanation = []
-    for i, summary in enumerate(summaries):
-        length_score = min(len(summary) / 100, 10)
-        total_score += length_score
-        explanation.append(f"Document {i+1}: Length score - {length_score}")
-        keyword_matches = sum(1 for word in query_keywords if word.lower() in summary.lower())
-        keyword_score = min(keyword_matches * 2, 10)
-        total_score += keyword_score
-        explanation.append(f"Document {i+1}: Keyword match score - {keyword_score}")
-    final_score = total_score / len(summaries) if summaries else 0
-    explanation_summary = "\n".join(explanation)
-    logger.info(f"Evaluation for model {model_name}: {final_score}/10")
-    logger.info(f"Explanation:\n{explanation_summary}")
-    return {"rating": round(final_score, 2), "explanation": explanation_summary}
+def evaluate_complete_answer(query: str, answer: str) -> dict:
+    """
+    Отправляет промт LLM, который должен оценить, соответствует ли ответ следующим критериям:
+      1. Ответ содержит рекомендации liekov vrátane názvu, stručného vysvetlenia
+         a (ak bolo žiadané) aj dávkovania alebo času užívania.
+      2. Если otázka obsahovala dodatočné požiadavky, odpoveď obsahuje aj samostatnú časť,
+         ktorá tieto požiadavky rieši.
+    Na základe týchto kritérií vráti hodnotenie od 0 do 10.
+    """
+    evaluation_prompt = (
+         f"Vyhodnoť nasledujúcu odpoveď na základe týchto kritérií:\n"
+         f"1. Odpoveď obsahuje odporúčania liekov vrátane názvu, stručného vysvetlenia a, ak bolo žiadané, aj dávkovanie alebo čas užívania.\n"
+         f"2. Ak otázka obsahovala dodatočné požiadavky, odpoveď má samostatnú časť, ktorá tieto požiadavky rieši.\n\n"
+         f"Otázka: '{query}'\n"
+         f"Odpoveď: '{answer}'\n\n"
+         "Na základe týchto kritérií daj odpovedi hodnotenie od 0 do 10, kde 10 znamená, že odpoveď je úplne logická a obsahuje všetky požadované informácie. "
+         "Vráť len číslo."
+    )
+    score_str = llm_small.generate_text(prompt=evaluation_prompt, max_tokens=50, temperature=0.3)
+    try:
+         score = float(score_str.strip())
+    except Exception as e:
+         logger.error(f"Error parsing evaluation score: {e}")
+         score = 0.0
+    return {"rating": round(score, 2), "explanation": "Evaluation based on required criteria."}
 
 ###############################################################################
-#             validation of recieved answer is it correct for user question                    #
+#             Validation of received answer against user question             #
 ###############################################################################
 def validate_answer_logic(query: str, answer: str) -> str:
     """
     Проверяет, соответствует ли ответ логике вопроса.
-    Если, например, вопрос относится к ľudským liekom a obsahuje otázku na dávkovanie,
-    odpoveď musí obsahovať iba lieky vhodné pre ľudí s uvedením správneho dávkovania.
+    Если в ответе отсутствуют требуемые элементы (например, отсутствует раздел с dávkovanie/čas
+    при наличии dodatočných požiadaviek), модель должна исправить ответ.
     """
     validation_prompt = (
         f"Otázka: '{query}'\n"
         f"Odpoveď: '{answer}'\n\n"
-        "Analyzuj prosím túto odpoveď. Ak odpoveď obsahuje odporúčania liekov, ktoré nie sú vhodné pre ľudí, "
-        "alebo ak neobsahuje správne informácie o dávkovaní, oprav ju tak, aby bola logicky konzistentná s otázkou. "
-        "Odpoveď musí obsahovať iba lieky určené pre ľudí a pri potrebe aj presné informácie o dávkovaní (napr. v gramoch). "
-        "Ak je odpoveď logická a korektná, vráť pôvodnú odpoveď bez zmien. "
+        "Analyzuj prosím túto odpoveď. Ak odpoveď neobsahuje všetky dodatočné informácie, na ktoré sa pýtal používateľ, "
+        "alebo ak odporúčania liekov nie sú úplné (napr. chýba dávkovanie alebo čas užívania, ak boli takéto požiadavky v otázke), "
+        "vytvor opravenú odpoveď, ktorá je logicky konzistentná s otázkou. "
         "Odpovedz v slovenčine a iba čistou, konečnou odpoveďou bez ďalších komentárov."
     )
     try:
@@ -231,26 +223,18 @@ def process_query_with_mistral(query, k=10):
         max_doc_length = 1000
         vector_documents = [doc[:max_doc_length] for doc in vector_documents[:max_docs]]
         if vector_documents:
-            vector_prompt = (
-                f"Otázka: '{query}'.\n"
-                "Na základe nasledujúcich informácií o liekoch:\n"
-                f"{vector_documents}\n\n"
-                "Prosím, uveďte tri najvhodnejšie lieky alebo riešenia pre daný problém. "
-                "Pre každý liek uveďte jeho názov, stručné a jasné vysvetlenie, prečo je vhodný, a ak je to relevantné, "
-                "aj odporúčané dávkovanie (napr. v gramoch alebo v iných vhodných jednotkách). "
-                "Odpovedajte priamo a ľudským, priateľským tónom v číslovanom zozname, bez nepotrebných úvodných fráz. "
-                "Odpoveď musí byť v slovenčine."
-            )
+            # Формируем промт для генерации ответа
+            vector_prompt = build_dynamic_prompt(query, vector_documents)
             summary_small_vector = llm_small.generate_text(prompt=vector_prompt, max_tokens=700, temperature=0.7)
             summary_large_vector = llm_large.generate_text(prompt=vector_prompt, max_tokens=700, temperature=0.7)
             splitter = RecursiveCharacterTextSplitter(chunk_size=200, chunk_overlap=20)
             split_summary_small_vector = splitter.split_text(summary_small_vector)
             split_summary_large_vector = splitter.split_text(summary_large_vector)
-            small_vector_eval = evaluate_results(query, split_summary_small_vector, 'Mistral Small')
-            large_vector_eval = evaluate_results(query, split_summary_large_vector, 'Mistral Large')
+            eval_small_vector = evaluate_complete_answer(query, summary_small_vector)
+            eval_large_vector = evaluate_complete_answer(query, summary_large_vector)
         else:
-            small_vector_eval = {"rating": 0, "explanation": "No results"}
-            large_vector_eval = {"rating": 0, "explanation": "No results"}
+            eval_small_vector = {"rating": 0, "explanation": "No results"}
+            eval_large_vector = {"rating": 0, "explanation": "No results"}
             summary_small_vector = ""
             summary_large_vector = ""
 
@@ -262,42 +246,32 @@ def process_query_with_mistral(query, k=10):
         text_documents = [hit['_source'].get('text', '') for hit in es_results['hits']['hits']]
         text_documents = [doc[:max_doc_length] for doc in text_documents[:max_docs]]
         if text_documents:
-            text_prompt = (
-                f"Otázka: '{query}'.\n"
-                "Na základe nasledujúcich informácií o liekoch:\n"
-                f"{text_documents}\n\n"
-                "Prosím, uveďte tri najvhodnejšie lieky alebo riešenia pre daný problém. "
-                "Pre každý liek uveďte jeho názov, stručné a jasné vysvetlenie, prečo je vhodný, a ak je to relevantné, "
-                "aj odporúčané dávkovanie (napr. v gramoch alebo v iných vhodných jednotkách). "
-                "Odpovedajte priamo a ľudským, priateľským tónom v číslovanom zozname, bez nepotrebných úvodných fráz. "
-                "Odpoveď musí byť v slovenčine."
-            )
+            text_prompt = build_dynamic_prompt(query, text_documents)
             summary_small_text = llm_small.generate_text(prompt=text_prompt, max_tokens=700, temperature=0.7)
             summary_large_text = llm_large.generate_text(prompt=text_prompt, max_tokens=700, temperature=0.7)
             splitter_text = RecursiveCharacterTextSplitter(chunk_size=200, chunk_overlap=20)
             split_summary_small_text = splitter_text.split_text(summary_small_text)
             split_summary_large_text = splitter_text.split_text(summary_large_text)
-            small_text_eval = evaluate_results(query, split_summary_small_text, 'Mistral Small')
-            large_text_eval = evaluate_results(query, split_summary_large_text, 'Mistral Large')
+            eval_small_text = evaluate_complete_answer(query, summary_small_text)
+            eval_large_text = evaluate_complete_answer(query, summary_large_text)
         else:
-            small_text_eval = {"rating": 0, "explanation": "No results"}
-            large_text_eval = {"rating": 0, "explanation": "No results"}
+            eval_small_text = {"rating": 0, "explanation": "No results"}
+            eval_large_text = {"rating": 0, "explanation": "No results"}
             summary_small_text = ""
             summary_large_text = ""
 
-        # Porovnanie výsledkov a výber najlepšieho
+        # Сравнение результатов и выбор лучшего варианта
         all_results = [
-            {"eval": small_vector_eval, "summary": summary_small_vector, "model": "Mistral Small Vector"},
-            {"eval": large_vector_eval, "summary": summary_large_vector, "model": "Mistral Large Vector"},
-            {"eval": small_text_eval, "summary": summary_small_text, "model": "Mistral Small Text"},
-            {"eval": large_text_eval, "summary": summary_large_text, "model": "Mistral Large Text"},
+            {"eval": eval_small_vector, "summary": summary_small_vector, "model": "Mistral Small Vector"},
+            {"eval": eval_large_vector, "summary": summary_large_vector, "model": "Mistral Large Vector"},
+            {"eval": eval_small_text, "summary": summary_small_text, "model": "Mistral Small Text"},
+            {"eval": eval_large_text, "summary": summary_large_text, "model": "Mistral Large Text"},
         ]
         best_result = max(all_results, key=lambda x: x["eval"]["rating"])
         logger.info(f"Best result from model {best_result['model']} with score {best_result['eval']['rating']}.")
 
-        # Dodatočná kontrola logiky odpovede
+        # Дополнительная проверка логики ответа
         validated_answer = validate_answer_logic(query, best_result["summary"])
-
 
         polished_answer = translate_preserving_medicine_names(validated_answer)
         return {
@@ -312,4 +286,3 @@ def process_query_with_mistral(query, k=10):
             "best_answer": "An error occurred during query processing.",
             "error": str(e)
         }
-
