@@ -3,21 +3,18 @@ import requests
 import logging
 import time
 import re
-import difflib
 from requests.exceptions import HTTPError
 from elasticsearch import Elasticsearch
-from langchain.chains import SequentialChain
-from langchain.chains import LLMChain, SequentialChain
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_elasticsearch import ElasticsearchStore
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.docstore.document import Document
-
-# from googletrans import Translator
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Načítanie konfiguračného súboru
 config_file_path = "config.json"
 with open(config_file_path, 'r') as config_file:
     config = json.load(config_file)
@@ -28,7 +25,7 @@ if not mistral_api_key:
 
 
 ###############################################################################
-#            translate all answer to slovak (temporary closed :)            #
+#            Preklad celej odpovede do slovenčiny (dočasne zavreté)           #
 ###############################################################################
 def translate_to_slovak(text: str) -> str:
     return text
@@ -54,10 +51,12 @@ def build_dynamic_prompt(query: str, documents: list) -> str:
         "Ak áno, v odpovedi najprv uveď odporúčané lieky – pre každý liek uveď jeho názov, stručné vysvetlenie a, ak je to relevantné, "
         "odporúčané dávkovanie alebo čas užívania, a potom v ďalšej časti poskytnú odpoveď na dodatočné požiadavky. "
         "Ak dodatočné požiadavky nie sú prítomné, uveď len odporúčanie liekov. "
-        "Odpovedz priamo a ľudským, priateľským tónom v číslovanom zozname, bez zbytočných úvodných fráz. "
-        "Odpoveď musí byť v slovenčine."
+        "Odpovedaj priamo a ľudským, priateľským tónom v číslovanom zozname, bez zbytočných úvodných fráz. "
+        "Odpoveď musí byť v slovenčine. "
+        "Prosím, odpovedaj v priateľskom, zdvorilom a profesionálnom tóne, bez akýchkoľvek agresívnych či drzých výrazov."
     )
     return prompt
+
 
 
 ###############################################################################
@@ -147,7 +146,28 @@ llm_large = CustomMistralLLM(
 
 
 ###############################################################################
-#       Nová funkcia pre detailné vyhodnotenie logiky a úplnosti odpovede     #
+# Funkcia pre klasifikáciu dopytu (vyhľadávanie vs. upresnenie) – na slovenčine
+###############################################################################
+def classify_query(query: str) -> str:
+    prompt = (
+        "Ty si zdravotnícky expert, ktorý analyzuje otázky používateľov. "
+        "Analyzuj nasledujúci dopyt a urči, či ide o dopyt na vyhľadanie liekov alebo o upresnenie/doplnenie už poskytnutej odpovede.\n"
+        "Ak dopyt obsahuje výrazy ako 'čo pit', 'aké lieky', 'odporuč liek', 'hľadám liek', odpovedaj slovom 'vyhľadávanie'.\n"
+        "Ak dopyt slúži na upresnenie, napríklad obsahuje výrazy ako 'a nie na predpis', 'upresni', 'este raz', odpovedaj slovom 'upresnenie'.\n"
+        f"Dopyt: \"{query}\""
+    )
+    classification = llm_small.generate_text(prompt=prompt, max_tokens=20, temperature=0.3)
+    classification = classification.strip().lower()
+    logger.info(f"Klasifikácia dopytu: {classification}")
+    if "vyhľadávanie" in classification:
+        return "vyhľadávanie"
+    elif "upresnenie" in classification:
+        return "upresnenie"
+    return "vyhľadávanie"  # Predvolená možnosť
+
+
+###############################################################################
+#       Funkcia pre vyhodnotenie úplnosti odpovede podľa kritérií              #
 ###############################################################################
 def evaluate_complete_answer(query: str, answer: str) -> dict:
     evaluation_prompt = (
@@ -194,12 +214,11 @@ def validate_answer_logic(query: str, answer: str) -> str:
 ###############################################################################
 class ConversationalAgent:
     def __init__(self):
-        # Jednoduchá implementácia dlhodobej pamäti pomocou slovníka
+        # Základná dlhodobá pamäť – kľúče nastavíme podľa potrieb
         self.long_term_memory = {
             "vek": None,
             "anamneza": None,
-            "predpis": None,
-            "kasel_typ": None
+            "predpis": None
         }
 
     def update_memory(self, key, value):
@@ -208,57 +227,56 @@ class ConversationalAgent:
     def get_memory(self, key):
         return self.long_term_memory.get(key, None)
 
+    def load_memory_from_history(self, chat_history: str):
+        """
+        Ak v histórii chatu existuje blok s uloženou pamäťou vo formáte:
+        [MEMORY]{"vek": "25", "anamneza": "...", "predpis": "..."}[/MEMORY]
+        tak sa táto pamäť načíta.
+        """
+        memory_match = re.search(r"\[MEMORY\](.*?)\[/MEMORY\]", chat_history, re.DOTALL)
+        if memory_match:
+            try:
+                memory_data = json.loads(memory_match.group(1))
+                self.long_term_memory.update(memory_data)
+                logger.info(f"Nahraná pamäť z histórie: {self.long_term_memory}")
+            except Exception as e:
+                logger.error(f"Chyba pri načítaní pamäte z histórie: {e}")
+
     def parse_user_info(self, query: str):
         """
-        Упрощённый парсинг для извлечения:
-        - Века (числа)
-        - Упоминаний о хронических заболеваниях/аллергиях
-        - Информации, что лекарство voľnopredajný alebo na predpis
-        - Типа kašľa (suchý / vykašliavanie)
+        Dynamický parsing informácií z dopytu – hľadáme základné informácie:
+        vek, anamnézu a informáciu o predpise.
         """
-
         text_lower = query.lower()
-
-        # 1) Век: ищем любое число до 3 цифр, после/до которого может быть слово "rok/rokov" и т.п.
+        # 1) Vek – hľadáme číslo (napr. "20 rokov")
         age_match = re.search(r"(\d{1,3})\s*(rok(ov|y)?|years?)?", text_lower)
-        if age_match:
-            # берем просто число (например 20)
+        if age_match and not self.get_memory("vek"):
             self.update_memory("vek", age_match.group(1))
-
-        # 2) Хронические заболевания / аллергии
-        #   - Если есть фраза "nemá" и "chronické" / "alergi", значит нет заболеваний.
-        #   - Если есть "má" + "chronické"/"alergi", значит есть.
-        if ("nemá" in text_lower or "nema" in text_lower) and ("chronické" in text_lower or "alerg" in text_lower):
-            self.update_memory("anamneza", "Ziadne chronicke ochorenia ani alergie")
-        elif ("chronické" in text_lower or "alerg" in text_lower) and ("má" in text_lower or "ma" in text_lower):
-            self.update_memory("anamneza", "Ma chronicke ochorenie alebo alergie (nespecifikovane)")
-
-        # 3) Predpis / voľnopredajný
-        #   - Проверяем упоминание "voľnopredajný"
+        # 2) Anamnéza – zisťujeme informácie o chronických ochoreniach či alergiách
+        if (("nemá" in text_lower or "nema" in text_lower) and ("chronické" in text_lower or "alerg" in text_lower)):
+            if not self.get_memory("anamneza"):
+                self.update_memory("anamneza", "Žiadne chronické ochorenia ani alergie")
+        elif (("chronické" in text_lower or "alerg" in text_lower) and ("má" in text_lower or "ma" in text_lower)):
+            if not self.get_memory("anamneza"):
+                self.update_memory("anamneza", "Má chronické ochorenie alebo alergie (nespecifikované)")
+        # 3) Predpis – zisťujeme, či je liek na predpis alebo voľnopredajný
         if "voľnopredajný" in text_lower:
-            self.update_memory("predpis", "volnopredajny")
+            if not self.get_memory("predpis"):
+                self.update_memory("predpis", "volnopredajny")
         elif "na predpis" in text_lower:
-            self.update_memory("predpis", "na predpis")
+            if not self.get_memory("predpis"):
+                self.update_memory("predpis", "na predpis")
         else:
-            # Если явно написали "predpis" + (nie/nemam)
-            # например: "predpis nie" => volnopredajny
             if "predpis" in text_lower:
-                if "nie" in text_lower or "nemam" in text_lower or "nemám" in text_lower:
+                if ("nie" in text_lower or "nemam" in text_lower or "nemám" in text_lower) and not self.get_memory(
+                        "predpis"):
                     self.update_memory("predpis", "volnopredajny")
-                else:
+                elif not self.get_memory("predpis"):
                     self.update_memory("predpis", "na predpis")
 
-        # 4) Typ kašľa
-        if "kašeľ" in text_lower:
-            if "suchý" in text_lower:
-                self.update_memory("kasel_typ", "suchy")
-            elif "vykašliavanie" in text_lower or "produktívny" in text_lower:
-                self.update_memory("kasel_typ", "produktívny")
-
     def analyze_input(self, query: str) -> dict:
-        # Сначала парсим вход, чтобы заполнить память
+        # Extrahujeme informácie z aktuálneho dopytu
         self.parse_user_info(query)
-
         missing_info = {}
         if not self.get_memory("vek"):
             missing_info["vek"] = "Prosím, uveďte vek pacienta."
@@ -266,12 +284,6 @@ class ConversationalAgent:
             missing_info["anamnéza"] = "Má pacient nejaké chronické ochorenia alebo alergie?"
         if not self.get_memory("predpis"):
             missing_info["predpis"] = "Ide o liek na predpis alebo voľnopredajný liek?"
-
-        # Дополнительно проверяем кашель
-        if "kašeľ" in query.lower():
-            if not self.get_memory("kasel_typ"):
-                missing_info["symptómy"] = "Upresnite, či ide o suchý kašeľ alebo produktívny kašeľ s vykašliavaním."
-
         return missing_info
 
     def ask_follow_up(self, missing_info: dict) -> str:
@@ -282,17 +294,75 @@ class ConversationalAgent:
 ###############################################################################
 #           Hlavná funkcia: process_query_with_mistral (Slovak prompt)       #
 ###############################################################################
-agent = ConversationalAgent()
+
+# URL nášho endpointu pre získanie detailov chatu
+CHAT_HISTORY_ENDPOINT = "http://localhost:5000/api/chat_history_detail"
 
 
-def process_query_with_mistral(query, k=10):
+def process_query_with_mistral(query, chat_id=None, k=10):
     logger.info("Processing query started.")
 
-    # Анализируем вход
+    # Najprv klasifikujeme dopyt
+    query_type = classify_query(query)
+    logger.info(f"Typ dopytu: {query_type}")
+
+    chat_history = ""
+    # Ak je chat_id zadané, vykonáme HTTP GET request na náš endpoint pre získanie detailov chatu
+    if chat_id:
+        try:
+            params = {"id": chat_id}
+            r = requests.get(CHAT_HISTORY_ENDPOINT, params=params)
+            if r.status_code == 200:
+                data = r.json()
+                # Očakávame, že endpoint vráti slovník s kľúčom "chat".
+                chat_data = data.get("chat", "")
+                if isinstance(chat_data, dict):
+                    chat_history = chat_data.get("chat", "")
+                else:
+                    chat_history = chat_data or ""
+                logger.info(f"História chatu bola načítaná z endpointu pre chatId: {chat_id}")
+            else:
+                logger.warning(
+                    f"Nepodarilo sa načítať históriu chatu (status code: {r.status_code}) pre chatId: {chat_id}")
+        except Exception as e:
+            logger.error(f"Chyba pri načítaní histórie chatu cez endpoint: {e}")
+
+    # Inicializujeme agenta a ak máme históriu, obnovíme z nej pamäť
+    agent = ConversationalAgent()
+    if chat_history:
+        agent.load_memory_from_history(chat_history)
+
+    # Ak ide o upresnenie, analyzujeme históriu a vygenerujeme nový, doplnený odpoveď
+    if query_type == "upresnenie" and chat_history:
+        logger.info("Upresnenie dopytu – analyzujem históriu a generujem upresnenú odpoveď.")
+        # Vytvoríme prompt, ktorý poskytne modelu kontext z histórie a nový dopyt
+        upresnenie_prompt = (
+            "Ty si zdravotnícky expert, ktorý odpovedá výlučne priateľským, zdvorilým a profesionálnym tónom bez akýchkoľvek pozdravov alebo zbytočných úvodných fráz. "
+            "Na základe nasledujúcej histórie chatu a nového dopytu vytvor stručnú, ale ucelenú odpoveď, ktorá doplní alebo upresní už poskytnuté informácie.\n\n"
+            "História chatu:\n"
+            f"{chat_history}\n\n"
+            "Nový dopyt:\n"
+            f"{query}\n\n"
+            "Vygeneruj odpoveď, ktorá obsahuje všetky relevantné informácie."
+        )
+
+        # Zvýšime max_tokens, aby sme získali rozsiahlejší text
+        upresnená_odpoveď = llm_small.generate_text(prompt=upresnenie_prompt, max_tokens=1500, temperature=0.5)
+        # Pripojíme blok pamäte
+        memory_block = f"\n\n[MEMORY]{json.dumps(agent.long_term_memory)}[/MEMORY]"
+        final_answer = upresnená_odpoveď + memory_block
+        return {
+            "best_answer": final_answer,
+            "model": "Upresnenie based",
+            "rating": 10,
+            "explanation": "Odpoveď vygenerovaná na základe analýzy histórie a upresnenia dopytu."
+        }
+
+    # Pokračujeme v prípade vyhľadávania
     missing_info = agent.analyze_input(query)
     if missing_info:
         follow_up_question = agent.ask_follow_up(missing_info)
-        logger.info(f"Missing information: {missing_info}")
+        logger.info(f"Chýbajúce informácie: {missing_info}")
         return {
             "best_answer": follow_up_question,
             "model": "Follow-up required",
@@ -311,9 +381,6 @@ def process_query_with_mistral(query, k=10):
             vector_prompt = build_dynamic_prompt(query, vector_documents)
             summary_small_vector = llm_small.generate_text(prompt=vector_prompt, max_tokens=1200, temperature=0.7)
             summary_large_vector = llm_large.generate_text(prompt=vector_prompt, max_tokens=1200, temperature=0.7)
-            splitter = RecursiveCharacterTextSplitter(chunk_size=200, chunk_overlap=20)
-            split_summary_small_vector = splitter.split_text(summary_small_vector)
-            split_summary_large_vector = splitter.split_text(summary_large_vector)
             eval_small_vector = evaluate_complete_answer(query, summary_small_vector)
             eval_large_vector = evaluate_complete_answer(query, summary_large_vector)
         else:
@@ -333,9 +400,6 @@ def process_query_with_mistral(query, k=10):
             text_prompt = build_dynamic_prompt(query, text_documents)
             summary_small_text = llm_small.generate_text(prompt=text_prompt, max_tokens=700, temperature=0.7)
             summary_large_text = llm_large.generate_text(prompt=text_prompt, max_tokens=700, temperature=0.7)
-            splitter_text = RecursiveCharacterTextSplitter(chunk_size=200, chunk_overlap=20)
-            split_summary_small_text = splitter_text.split_text(summary_small_text)
-            split_summary_large_text = splitter_text.split_text(summary_large_text)
             eval_small_text = evaluate_complete_answer(query, summary_small_text)
             eval_large_text = evaluate_complete_answer(query, summary_large_text)
         else:
@@ -344,7 +408,7 @@ def process_query_with_mistral(query, k=10):
             summary_small_text = ""
             summary_large_text = ""
 
-        # Выбираем лучший результат
+        # Výber najlepšieho výsledku
         all_results = [
             {"eval": eval_small_vector, "summary": summary_small_vector, "model": "Mistral Small Vector"},
             {"eval": eval_large_vector, "summary": summary_large_vector, "model": "Mistral Large Vector"},
@@ -352,14 +416,18 @@ def process_query_with_mistral(query, k=10):
             {"eval": eval_large_text, "summary": summary_large_text, "model": "Mistral Large Text"},
         ]
         best_result = max(all_results, key=lambda x: x["eval"]["rating"])
-        logger.info(f"Best result from model {best_result['model']} with score {best_result['eval']['rating']}.")
+        logger.info(f"Najlepší výsledok z modelu {best_result['model']} s hodnotením {best_result['eval']['rating']}.")
 
-        # Проверка логики ответа
+        # Validácia logiky odpovede
         validated_answer = validate_answer_logic(query, best_result["summary"])
         polished_answer = translate_preserving_medicine_names(validated_answer)
 
+        # Pripojíme blok s pamäťou na konci odpovede pre ďalšie načítanie
+        memory_block = f"\n\n[MEMORY]{json.dumps(agent.long_term_memory)}[/MEMORY]"
+        final_answer = polished_answer + memory_block
+
         return {
-            "best_answer": polished_answer,
+            "best_answer": final_answer,
             "model": best_result["model"],
             "rating": best_result["eval"]["rating"],
             "explanation": best_result["eval"]["explanation"]

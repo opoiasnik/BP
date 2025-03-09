@@ -1,23 +1,21 @@
 import time
 import re
-
-# Сохраняем оригинальную функцию time.time
-_real_time = time.time
-# Переопределяем time.time для смещения времени на 1 секунду назад
-time.time = lambda: _real_time() - 1
-
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from google.oauth2 import id_token
-from google.auth.transport import requests
+from google.auth.transport import requests as google_requests
 import logging
-
-# Импортируем функцию обработки из model.py
-from model import process_query_with_mistral
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
-# Параметры подключения к базе данных
+# Импортируем функцию process_query_with_mistral из model.py
+from model import process_query_with_mistral
+
+# Сохраняем оригинальную функцию time.time и смещаем время на 1 сек назад
+_real_time = time.time
+time.time = lambda: _real_time() - 1
+
+# Параметры подключения к БД
 DATABASE_CONFIG = {
     "dbname": "postgres",
     "user": "postgres",
@@ -26,7 +24,7 @@ DATABASE_CONFIG = {
     "port": 5432,
 }
 
-# Подключение к базе данных
+# Подключение к БД
 try:
     conn = psycopg2.connect(**DATABASE_CONFIG)
     print("Подключение к базе данных успешно установлено")
@@ -60,7 +58,6 @@ def save_user_to_db(name, email, google_id=None, password=None):
     except Exception as e:
         print(f"Error saving user to database: {e}")
 
-# Эндпоинт для верификации токенов Google OAuth
 @app.route('/api/verify', methods=['POST'])
 def verify_token():
     data = request.get_json()
@@ -68,10 +65,10 @@ def verify_token():
     if not token:
         return jsonify({'error': 'No token provided'}), 400
     try:
-        id_info = id_token.verify_oauth2_token(token, requests.Request(), CLIENT_ID)
+        id_info = id_token.verify_oauth2_token(token, google_requests.Request(), CLIENT_ID)
         user_email = id_info.get('email')
         user_name = id_info.get('name')
-        google_id = id_info.get('sub')  # Уникальный идентификатор пользователя Google
+        google_id = id_info.get('sub')
         save_user_to_db(name=user_name, email=user_email, google_id=google_id)
         logger.info(f"User authenticated and saved: {user_name} ({user_email})")
         return jsonify({'message': 'Authentication successful', 'user': {'email': user_email, 'name': user_name}}), 200
@@ -79,13 +76,12 @@ def verify_token():
         logger.error(f"Token verification failed: {e}")
         return jsonify({'error': 'Invalid token'}), 400
 
-# Эндпоинт для регистрации пользователя с проверкой на дублирование
 @app.route('/api/register', methods=['POST'])
 def register():
     data = request.get_json()
     name = data.get('name')
     email = data.get('email')
-    password = data.get('password')  # Рекомендуется хэшировать пароль
+    password = data.get('password')
     if not all([name, email, password]):
         return jsonify({'error': 'All fields are required'}), 400
     try:
@@ -99,7 +95,6 @@ def register():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# Эндпоинт для логина пользователя
 @app.route('/api/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -111,39 +106,42 @@ def login():
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("SELECT * FROM users WHERE email = %s", (email,))
             user = cur.fetchone()
-            if not user:
-                return jsonify({'error': 'Invalid credentials'}), 401
-            if user.get('password') != password:
+            if not user or user.get('password') != password:
                 return jsonify({'error': 'Invalid credentials'}), 401
         return jsonify({'message': 'Login successful', 'user': {'name': user.get('name'), 'email': user.get('email')}}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# Объединённый эндпоинт для обработки запроса чата
 @app.route('/api/chat', methods=['POST'])
 def chat():
     data = request.get_json()
     query = data.get('query', '')
-    user_email = data.get('email')  # email пользователя (если передается)
-    chat_id = data.get('chatId')    # параметр для обновления существующего чата
+    user_email = data.get('email')
+    chat_id = data.get('chatId')  # Если передан, это существующий чат
 
     if not query:
         return jsonify({'error': 'No query provided'}), 400
 
-    # Вызов функции для обработки запроса (например, чат-бота)
-    response_obj = process_query_with_mistral(query)
+    # Логгируем переданный chatId
+    if chat_id:
+        logger.info(f"Открыт существующий чат с chatId: {chat_id}")
+    else:
+        logger.info("Создается новый чат.")
+
+    # Передаем chat_id в функцию обработки
+    response_obj = process_query_with_mistral(query, chat_id=chat_id)
     best_answer = ""
     if isinstance(response_obj, dict):
         best_answer = response_obj.get("best_answer", "")
     else:
         best_answer = str(response_obj)
 
-    # Форматирование ответа с использованием re.sub
+    # Форматирование ответа
     best_answer = re.sub(r'[*#]', '', best_answer)
     best_answer = re.sub(r'(\d\.\s)', r'\n\n\1', best_answer)
     best_answer = re.sub(r':\s-', r':\n-', best_answer)
 
-    # Если chatId передан, обновляем существующий чат, иначе создаем новый чат
+    # Обновляем существующий чат или создаем новый
     if chat_id:
         try:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -153,7 +151,9 @@ def chat():
                     updated_chat = existing_chat['chat'] + f"\nUser: {query}\nBot: {best_answer}"
                     cur.execute("UPDATE chat_history SET chat = %s WHERE id = %s", (updated_chat, chat_id))
                     conn.commit()
+                    logger.info(f"История чата (chatId: {chat_id}) успешно обновлена.")
                 else:
+                    # Если чат не найден – создаем новый
                     with conn.cursor(cursor_factory=RealDictCursor) as cur2:
                         cur2.execute(
                             "INSERT INTO chat_history (user_email, chat) VALUES (%s, %s) RETURNING id",
@@ -162,6 +162,7 @@ def chat():
                         new_chat_id = cur2.fetchone()['id']
                         conn.commit()
                         chat_id = new_chat_id
+                        logger.info(f"Новый чат создан с chatId: {chat_id}")
         except Exception as e:
             return jsonify({'error': str(e)}), 500
     else:
@@ -174,13 +175,12 @@ def chat():
                 new_chat_id = cur.fetchone()['id']
                 conn.commit()
                 chat_id = new_chat_id
+                logger.info(f"Новый чат создан с chatId: {chat_id}")
         except Exception as e:
             return jsonify({'error': str(e)}), 500
 
-    # Возвращаем текстовый ответ и новый chatId, если чат был создан
     return jsonify({'response': {'best_answer': best_answer, 'model': 'Mistral Small Vector', 'chatId': chat_id}}), 200
 
-# Эндпоинт для получения истории чатов конкретного пользователя
 @app.route('/api/chat_history', methods=['GET'])
 def get_chat_history():
     user_email = request.args.get('email')
@@ -197,7 +197,6 @@ def get_chat_history():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# Эндпоинт для получения деталей чата по ID
 @app.route('/api/chat_history_detail', methods=['GET'])
 def chat_history_detail():
     chat_id = request.args.get('id')
@@ -215,4 +214,3 @@ def chat_history_detail():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
-
