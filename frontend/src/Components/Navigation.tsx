@@ -124,24 +124,24 @@ const Navigation = ({ isExpanded = false }: NavigationProps) => {
                             )}
                         </IconButton>
                     </Link>
-                    <button onClick={handleThemeSwitch} className='flex items-center gap-2'>
-                        <IconButton
-                            sx={{
-                                width: 40,
-                                height: 40,
-                                borderRadius: 2,
-                                background: theme === 'dark' ? 'white' : 'initial',
-                                '&:focus-visible': {
-                                    outline: '2px solid blue',
-                                    outlineOffset: '0px',
-                                    borderRadius: '4px',
-                                },
-                            }}
-                        >
-                            {theme === 'light' ? <CiLight size={30} /> : <MdOutlineDarkMode size={30} />}
-                        </IconButton>
-                        {isExpanded && (theme === 'light' ? 'Light mode' : 'Dark mode')}
-                    </button>
+                    {/*<button onClick={handleThemeSwitch} className='flex items-center gap-2'>*/}
+                    {/*    <IconButton*/}
+                    {/*        sx={{*/}
+                    {/*            width: 40,*/}
+                    {/*            height: 40,*/}
+                    {/*            borderRadius: 2,*/}
+                    {/*            background: theme === 'dark' ? 'white' : 'initial',*/}
+                    {/*            '&:focus-visible': {*/}
+                    {/*                outline: '2px solid blue',*/}
+                    {/*                outlineOffset: '0px',*/}
+                    {/*                borderRadius: '4px',*/}
+                    {/*            },*/}
+                    {/*        }}*/}
+                    {/*    >*/}
+                    {/*        {theme === 'light' ? <CiLight size={30} /> : <MdOutlineDarkMode size={30} />}*/}
+                    {/*    </IconButton>*/}
+                    {/*    {isExpanded && (theme === 'light' ? 'Light mode' : 'Dark mode')}*/}
+                    {/*</button>*/}
                 </div>
             </div>
         </div>
