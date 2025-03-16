@@ -349,8 +349,8 @@ def process_query_with_mistral(query, chat_id=None, k=10):
         # Zvýšime max_tokens, aby sme získali rozsiahlejší text
         upresnená_odpoveď = llm_small.generate_text(prompt=upresnenie_prompt, max_tokens=1500, temperature=0.5)
         # Pripojíme blok pamäte
-        memory_block = f"\n\n[MEMORY]{json.dumps(agent.long_term_memory)}[/MEMORY]"
-        final_answer = upresnená_odpoveď + memory_block
+
+        final_answer = upresnená_odpoveď
         return {
             "best_answer": final_answer,
             "model": "Upresnenie based",
@@ -423,8 +423,8 @@ def process_query_with_mistral(query, chat_id=None, k=10):
         polished_answer = translate_preserving_medicine_names(validated_answer)
 
         # Pripojíme blok s pamäťou na konci odpovede pre ďalšie načítanie
-        memory_block = f"\n\n[MEMORY]{json.dumps(agent.long_term_memory)}[/MEMORY]"
-        final_answer = polished_answer + memory_block
+
+        final_answer = polished_answer
 
         return {
             "best_answer": final_answer,
