@@ -299,46 +299,59 @@ class ConversationalAgent:
 CHAT_HISTORY_ENDPOINT = "http://localhost:5000/api/chat_history_detail"
 
 
-def process_query_with_mistral(query, chat_id=None, k=10):
+def process_query_with_mistral(query, chat_id, chat_context, k=10):
+    """
+    Обработка пользовательского запроса к боту:
+      1. Классификация запроса (vyhľadávanie vs. upresnenie).
+      2. Если upresnenie (уточнение) и есть история чата – уточняем ответ.
+      3. Если чат новый (история пустая), просим недостающие данные (возраст, анамнез, предписание).
+      4. Если нужные данные есть, запускаем обычную логику с векторным поиском и генерацией ответа.
+    """
     logger.info("Processing query started.")
 
-    # Najprv klasifikujeme dopyt
+    # 1. Классифицируем запрос
     query_type = classify_query(query)
     logger.info(f"Typ dopytu: {query_type}")
+    logger.info(f"HAART: {chat_context}")
 
+    # 2. Загружаем историю чата
     chat_history = ""
-    # Ak je chat_id zadané, vykonáme HTTP GET request na náš endpoint pre získanie detailov chatu
-    if chat_id:
+    if chat_context:
+        chat_history = chat_context
+    elif chat_id:
         try:
             params = {"id": chat_id}
             r = requests.get(CHAT_HISTORY_ENDPOINT, params=params)
             if r.status_code == 200:
                 data = r.json()
-                # Očakávame, že endpoint vráti slovník s kľúčom "chat".
                 chat_data = data.get("chat", "")
                 if isinstance(chat_data, dict):
+                    # Если формат вернулся как словарь
                     chat_history = chat_data.get("chat", "")
                 else:
+                    # Иначе это просто строка
                     chat_history = chat_data or ""
                 logger.info(f"História chatu bola načítaná z endpointu pre chatId: {chat_id}")
             else:
                 logger.warning(
-                    f"Nepodarilo sa načítať históriu chatu (status code: {r.status_code}) pre chatId: {chat_id}")
+                    f"Nepodarilo sa načítať históriu chatu (status code: {r.status_code}) pre chatId: {chat_id}"
+                )
         except Exception as e:
             logger.error(f"Chyba pri načítaní histórie chatu cez endpoint: {e}")
 
-    # Inicializujeme agenta a ak máme históriu, obnovíme z nej pamäť
+    # 3. Инициализация "агента" (обрабатывает память/контекст)
     agent = ConversationalAgent()
     if chat_history:
         agent.load_memory_from_history(chat_history)
 
-    # Ak ide o upresnenie, analyzujeme históriu a vygenerujeme nový, doplnený odpoveď
+    # 4. Уточнение (upresnenie), если история чата не пустая
     if query_type == "upresnenie" and chat_history:
         logger.info("Upresnenie dopytu – analyzujem históriu a generujem upresnenú odpoveď.")
-        # Vytvoríme prompt, ktorý poskytne modelu kontext z histórie a nový dopyt
         upresnenie_prompt = (
-            "Ty si zdravotnícky expert, ktorý odpovedá výlučne priateľským, zdvorilým a profesionálnym tónom bez akýchkoľvek pozdravov alebo zbytočných úvodných fráz. "
-            "Na základe nasledujúcej histórie chatu a nového dopytu vytvor stručnú, ale ucelenú odpoveď, ktorá doplní alebo upresní už poskytnuté informácie.\n\n"
+            "Ty si zdravotnícky expert, ktorý odpovedá výlučne priateľským, zdvorilým a profesionálnym tónom "
+            "bez akýchkoľvek pozdravov alebo zbytočných úvodných fráz. "
+            "Na základe nasledujúcej histórie chatu a nového dopytu vytvor stručnú, ale ucelenú odpoveď, "
+            "ktorá doplní alebo upresní už poskytnuté informácie.\n\n"
             "História chatu:\n"
             f"{chat_history}\n\n"
             "Nový dopyt:\n"
@@ -346,9 +359,12 @@ def process_query_with_mistral(query, chat_id=None, k=10):
             "Vygeneruj odpoveď, ktorá obsahuje všetky relevantné informácie."
         )
 
-        # Zvýšime max_tokens, aby sme získali rozsiahlejší text
-        upresnená_odpoveď = llm_small.generate_text(prompt=upresnenie_prompt, max_tokens=1500, temperature=0.5)
-        # Pripojíme blok pamäte
+        # Генерируем уточнённый ответ
+        upresnená_odpoveď = llm_small.generate_text(
+            prompt=upresnenie_prompt,
+            max_tokens=1500,
+            temperature=0.5
+        )
 
         final_answer = upresnená_odpoveď
         return {
@@ -358,17 +374,22 @@ def process_query_with_mistral(query, chat_id=None, k=10):
             "explanation": "Odpoveď vygenerovaná na základe analýzy histórie a upresnenia dopytu."
         }
 
-    # Pokračujeme v prípade vyhľadávania
-    missing_info = agent.analyze_input(query)
-    if missing_info:
-        follow_up_question = agent.ask_follow_up(missing_info)
-        logger.info(f"Chýbajúce informácie: {missing_info}")
-        return {
-            "best_answer": follow_up_question,
-            "model": "Follow-up required",
-            "rating": 0,
-            "explanation": "Získajte doplňujúce informácie pre presnejšiu odpoveď."
-        }
+    # 5. Если чат «новый» (история пустая), проверяем, не нужно ли у пользователя спросить возраст/анамнез/предписание.
+    if not chat_history.strip():
+        missing_info = agent.analyze_input(query)
+        if missing_info:
+            # Возвращаем вопросы по недостающим данным и завершаем функцию
+            follow_up_question = agent.ask_follow_up(missing_info)
+            logger.info(f"Chýbajúce informácie (новý chat): {missing_info}")
+            return {
+                "best_answer": follow_up_question,
+                "model": "Follow-up required (new chat)",
+                "rating": 0,
+                "explanation": "Získajte doplňujúce informácie pre presnejšiu odpoveď."
+            }
+
+    # 6. Если мы дошли сюда, значит либо чат не новый, либо нужные поля уже есть.
+    #    Выполняем обычную логику: векторный поиск + генерация ответа.
 
     try:
         # --- Vector search ---
@@ -377,10 +398,19 @@ def process_query_with_mistral(query, chat_id=None, k=10):
         max_docs = 5
         max_doc_length = 1000
         vector_documents = [doc[:max_doc_length] for doc in vector_documents[:max_docs]]
+
         if vector_documents:
             vector_prompt = build_dynamic_prompt(query, vector_documents)
-            summary_small_vector = llm_small.generate_text(prompt=vector_prompt, max_tokens=1200, temperature=0.7)
-            summary_large_vector = llm_large.generate_text(prompt=vector_prompt, max_tokens=1200, temperature=0.7)
+            summary_small_vector = llm_small.generate_text(
+                prompt=vector_prompt,
+                max_tokens=1200,
+                temperature=0.7
+            )
+            summary_large_vector = llm_large.generate_text(
+                prompt=vector_prompt,
+                max_tokens=1200,
+                temperature=0.7
+            )
             eval_small_vector = evaluate_complete_answer(query, summary_small_vector)
             eval_large_vector = evaluate_complete_answer(query, summary_large_vector)
         else:
@@ -396,10 +426,19 @@ def process_query_with_mistral(query, chat_id=None, k=10):
         )
         text_documents = [hit['_source'].get('text', '') for hit in es_results['hits']['hits']]
         text_documents = [doc[:max_doc_length] for doc in text_documents[:max_docs]]
+
         if text_documents:
             text_prompt = build_dynamic_prompt(query, text_documents)
-            summary_small_text = llm_small.generate_text(prompt=text_prompt, max_tokens=700, temperature=0.7)
-            summary_large_text = llm_large.generate_text(prompt=text_prompt, max_tokens=700, temperature=0.7)
+            summary_small_text = llm_small.generate_text(
+                prompt=text_prompt,
+                max_tokens=700,
+                temperature=0.7
+            )
+            summary_large_text = llm_large.generate_text(
+                prompt=text_prompt,
+                max_tokens=700,
+                temperature=0.7
+            )
             eval_small_text = evaluate_complete_answer(query, summary_small_text)
             eval_large_text = evaluate_complete_answer(query, summary_large_text)
         else:
@@ -408,21 +447,25 @@ def process_query_with_mistral(query, chat_id=None, k=10):
             summary_small_text = ""
             summary_large_text = ""
 
-        # Výber najlepšieho výsledku
+        # Сравниваем результаты всех моделей/подходов
         all_results = [
             {"eval": eval_small_vector, "summary": summary_small_vector, "model": "Mistral Small Vector"},
             {"eval": eval_large_vector, "summary": summary_large_vector, "model": "Mistral Large Vector"},
             {"eval": eval_small_text, "summary": summary_small_text, "model": "Mistral Small Text"},
             {"eval": eval_large_text, "summary": summary_large_text, "model": "Mistral Large Text"},
         ]
+
+        # Выбираем результат с максимальным рейтингом
         best_result = max(all_results, key=lambda x: x["eval"]["rating"])
-        logger.info(f"Najlepší výsledok z modelu {best_result['model']} s hodnotením {best_result['eval']['rating']}.")
+        logger.info(
+            f"Najlepší výsledok z modelu {best_result['model']} "
+            f"s hodnotením {best_result['eval']['rating']}."
+        )
 
-        # Validácia logiky odpovede
+        # Валидируем логику ответа
         validated_answer = validate_answer_logic(query, best_result["summary"])
+        # Дополнительный «полиш» для перевода / сохранения названий
         polished_answer = translate_preserving_medicine_names(validated_answer)
-
-        # Pripojíme blok s pamäťou na konci odpovede pre ďalšie načítanie
 
         final_answer = polished_answer
 
@@ -432,9 +475,11 @@ def process_query_with_mistral(query, chat_id=None, k=10):
             "rating": best_result["eval"]["rating"],
             "explanation": best_result["eval"]["explanation"]
         }
+
     except Exception as e:
         logger.error(f"Error: {str(e)}")
         return {
             "best_answer": "An error occurred during query processing.",
             "error": str(e)
         }
+

@@ -112,36 +112,44 @@ def login():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+
 @app.route('/api/chat', methods=['POST'])
 def chat():
     data = request.get_json()
     query = data.get('query', '')
     user_email = data.get('email')
-    chat_id = data.get('chatId')  # Если передан, это существующий чат
+    chat_id = data.get('chatId')  # Ak je zadané, ide o existujúci chat
 
     if not query:
         return jsonify({'error': 'No query provided'}), 400
 
-    # Логгируем переданный chatId
+    logger.info(f"Spracovávam dopyt pre chatId: {chat_id if chat_id else 'nový chat'}")
+
+    # Vykonáme SELECT na načítanie kontextu chatu z databázy
+    chat_context = ""
     if chat_id:
-        logger.info(f"Открыт существующий чат с chatId: {chat_id}")
-    else:
-        logger.info("Создается новый чат.")
+        try:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT chat FROM chat_history WHERE id = %s", (chat_id,))
+                result = cur.fetchone()
+                if result and 'chat' in result:
+                    chat_context = result['chat']
+                    logger.info(f"Načítaný chat context z databázy: {chat_context}")
+                else:
+                    logger.info("Pre zadaný chatId nebol nájdený žiadny chat context.")
+        except Exception as e:
+            logger.error(f"Chyba pri načítaní kontextu chatu z DB: {e}")
 
-    # Передаем chat_id в функцию обработки
-    response_obj = process_query_with_mistral(query, chat_id=chat_id)
-    best_answer = ""
-    if isinstance(response_obj, dict):
-        best_answer = response_obj.get("best_answer", "")
-    else:
-        best_answer = str(response_obj)
+    # Odovzdáme načítaný chat_context do funkcie process_query_with_mistral
+    response_obj = process_query_with_mistral(query, chat_id=chat_id, chat_context=chat_context)
+    best_answer = response_obj.get("best_answer", "") if isinstance(response_obj, dict) else str(response_obj)
 
-    # Форматирование ответа
+    # Formátovanie odpovede
     best_answer = re.sub(r'[*#]', '', best_answer)
     best_answer = re.sub(r'(\d\.\s)', r'\n\n\1', best_answer)
     best_answer = re.sub(r':\s-', r':\n-', best_answer)
 
-    # Обновляем существующий чат или создаем новый
+    # Aktualizácia alebo vytvorenie záznamu v chat_history
     if chat_id:
         try:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -151,9 +159,8 @@ def chat():
                     updated_chat = existing_chat['chat'] + f"\nUser: {query}\nBot: {best_answer}"
                     cur.execute("UPDATE chat_history SET chat = %s WHERE id = %s", (updated_chat, chat_id))
                     conn.commit()
-                    logger.info(f"История чата (chatId: {chat_id}) успешно обновлена.")
+                    logger.info(f"História chatu (chatId: {chat_id}) bola úspešne aktualizovaná.")
                 else:
-                    # Если чат не найден – создаем новый
                     with conn.cursor(cursor_factory=RealDictCursor) as cur2:
                         cur2.execute(
                             "INSERT INTO chat_history (user_email, chat) VALUES (%s, %s) RETURNING id",
@@ -162,7 +169,7 @@ def chat():
                         new_chat_id = cur2.fetchone()['id']
                         conn.commit()
                         chat_id = new_chat_id
-                        logger.info(f"Новый чат создан с chatId: {chat_id}")
+                        logger.info(f"Vytvorený nový chat s chatId: {chat_id}")
         except Exception as e:
             return jsonify({'error': str(e)}), 500
     else:
@@ -175,11 +182,13 @@ def chat():
                 new_chat_id = cur.fetchone()['id']
                 conn.commit()
                 chat_id = new_chat_id
-                logger.info(f"Новый чат создан с chatId: {chat_id}")
+                logger.info(f"Vytvorený nový chat s chatId: {chat_id}")
         except Exception as e:
             return jsonify({'error': str(e)}), 500
 
-    return jsonify({'response': {'best_answer': best_answer, 'model': 'Mistral Small Vector', 'chatId': chat_id}}), 200
+    return jsonify({'response': {'best_answer': best_answer, 'model': response_obj.get("model", ""), 'chatId': chat_id}}), 200
+
+
 
 @app.route('/api/chat_history', methods=['GET'])
 def get_chat_history():
