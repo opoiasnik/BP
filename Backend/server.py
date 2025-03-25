@@ -189,6 +189,40 @@ def chat():
     return jsonify({'response': {'best_answer': best_answer, 'model': response_obj.get("model", ""), 'chatId': chat_id}}), 200
 
 
+@app.route('/api/update_profile', methods=['PUT'])
+def update_profile():
+    data = request.get_json()
+    email = data.get('email')
+    if not email:
+        return jsonify({'error': 'Email is required'}), 400
+
+    # Fields to update; if not provided, the current value remains.
+    name = data.get('name')
+    phone = data.get('phone')
+    role = data.get('role')
+    bio = data.get('bio')
+    picture = data.get('picture')
+
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                UPDATE users
+                SET name = COALESCE(%s, name),
+                    phone = COALESCE(%s, phone),
+                    role = COALESCE(%s, role),
+                    bio = COALESCE(%s, bio),
+                    picture = COALESCE(%s, picture)
+                WHERE email = %s
+                """,
+                (name, phone, role, bio, picture, email)
+            )
+            conn.commit()
+        logger.info(f"Profile updated for {email}")
+        return jsonify({'message': 'Profile updated successfully'}), 200
+    except Exception as e:
+        logger.error(f"Error updating profile: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/chat_history', methods=['GET'])
 def get_chat_history():

@@ -5,6 +5,8 @@ import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import { Box, Button, Avatar, Modal, Typography } from '@mui/material';
 import gsap from 'gsap';
 import { useGSAP } from '@gsap/react';
+import LogoutIcon from '@mui/icons-material/Logout';
+import LoginIcon from '@mui/icons-material/Login';
 import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
 import { Link, useNavigate } from 'react-router-dom';
 import RegistrationForm from "../Components/RegistrationForm";
@@ -57,7 +59,7 @@ const Navbar: React.FC<NavbarProps> = ({ user, setUser }) => {
             </div>
             <ul className="flex space-x-6 text-gray-600">
                 <li>
-                    <Link to="/dashboard" className="hover:text-bright-blue transition duration-300">
+                    <Link to="/" className="hover:text-bright-blue transition duration-300">
                         Home
                     </Link>
                 </li>
@@ -75,19 +77,17 @@ const Navbar: React.FC<NavbarProps> = ({ user, setUser }) => {
             <div className="flex items-center">
                 {user ? (
                     <div className="flex items-center gap-2">
-                        <Avatar alt={user.name} src={user.picture} />
-                        <Button variant="outlined" size="small" onClick={handleSignOut}>
-                            Sign Out
-                        </Button>
+                        <Avatar alt={user.name} src={user.picture} onClick={()=>navigate('/profile')} />
+                        <LogoutIcon
+                            onClick={handleSignOut}
+                            sx={{ cursor: 'pointer', color: '#0d47a1', fontSize: '30px' }}
+                        />
                     </div>
                 ) : (
-                    <Button
-                        startIcon={<CgLogIn />}
-                        variant="outlined"
+                    <LoginIcon
                         onClick={() => navigate('/register')}
-                    >
-                        Sign in
-                    </Button>
+                        sx={{ cursor: 'pointer', color: '#0d47a1', fontSize: '30px' }}
+                    />
                 )}
             </div>
         </nav>
@@ -193,4 +193,5 @@ const Home: React.FC = () => {
     );
 };
 
-export default Home;
+export { Home, Navbar };
+

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Box, Typography, Paper } from '@mui/material';
 
 interface ChatHistoryItem {
     id: number;
@@ -32,50 +33,102 @@ const ChatHistory: React.FC = () => {
         }
     }, []);
 
-
     const handleClick = (item: ChatHistoryItem) => {
         navigate(`/dashboard/chat/${item.id}`, { state: { selectedChat: item } });
     };
 
     return (
-        <div style={{ padding: '20px', height: '100vh', boxSizing: 'border-box' }}>
-            <h1>Chat History</h1>
-            {error && <p style={{ color: 'red' }}>{error}</p>}
-            {history.length === 0 && !error ? (
-                <p>No chat history found.</p>
+        <Box
+            sx={{
+                width: '100%',
+                height: '100vh',
+                overflowY: 'auto',
+                background: '#f5f5f5',
+                boxSizing: 'border-box',
+                p: 3,
+
+                /* Hide scrollbar for Chrome, Safari and Opera */
+                '&::-webkit-scrollbar': {
+                    display: 'none',
+                },
+                /* Hide scrollbar for IE, Edge and Firefox */
+                '-ms-overflow-style': 'none',  // IE and Edge
+                'scrollbarWidth': 'none',      // Firefox
+            }}
+        >
+            <Typography
+                variant="h4"
+                sx={{
+                    mb: 3,
+                    fontWeight: 'bold',
+                    textAlign: 'center',
+                    color: '#0d47a1',
+                }}
+            >
+                Chat History
+            </Typography>
+            {error ? (
+                <Typography
+                    variant="body1"
+                    sx={{ color: 'error.main', textAlign: 'center' }}
+                >
+                    {error}
+                </Typography>
             ) : (
-
-                <div style={{ maxHeight: 'calc(100vh - 100px)', overflowY: 'auto' }}>
-                    <ul style={{ listStyleType: 'none', padding: 0 }}>
-                        {history.map((item) => {
-
+                <Box sx={{ maxWidth: '800px', mx: 'auto' }}>
+                    {history.length === 0 ? (
+                        <Typography
+                            variant="body1"
+                            sx={{ textAlign: 'center', color: '#424242' }}
+                        >
+                            No chat history found.
+                        </Typography>
+                    ) : (
+                        history.map((item) => {
                             const lines = item.chat.split("\n");
                             let firstUserMessage = lines[0];
                             if (firstUserMessage.startsWith("User:")) {
                                 firstUserMessage = firstUserMessage.replace("User:", "").trim();
                             }
                             return (
-                                <li
+                                <Paper
                                     key={item.id}
-                                    style={{
-                                        marginBottom: '15px',
-                                        borderBottom: '1px solid #ccc',
-                                        paddingBottom: '10px',
-                                        cursor: 'pointer'
+                                    sx={{
+                                        p: 2,
+                                        mb: 2,
+                                        cursor: 'pointer',
+                                        transition: 'box-shadow 0.3s ease',
+                                        '&:hover': { boxShadow: 6 },
                                     }}
                                     onClick={() => handleClick(item)}
                                 >
-                                    <div>
-                                        <strong>{firstUserMessage}</strong>
-                                    </div>
-                                    <small>{new Date(item.created_at).toLocaleString()}</small>
-                                </li>
+                                    <Box
+                                        sx={{
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                        }}
+                                    >
+                                        <Typography
+                                            variant="subtitle1"
+                                            sx={{ fontWeight: 'bold', color: '#0d47a1' }}
+                                        >
+                                            {firstUserMessage}
+                                        </Typography>
+                                        <Typography
+                                            variant="caption"
+                                            sx={{ color: '#757575' }}
+                                        >
+                                            {new Date(item.created_at).toLocaleString()}
+                                        </Typography>
+                                    </Box>
+                                </Paper>
                             );
-                        })}
-                    </ul>
-                </div>
+                        })
+                    )}
+                </Box>
             )}
-        </div>
+        </Box>
     );
 };
 
