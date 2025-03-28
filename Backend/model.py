@@ -14,7 +14,7 @@ from psycopg2.extras import RealDictCursor
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Načítanie konfiguračného súboru
+# Загрузка конфигурации
 config_file_path = "config.json"
 with open(config_file_path, 'r') as config_file:
     config = json.load(config_file)
@@ -23,26 +23,64 @@ mistral_api_key = "hXDC4RBJk1qy5pOlrgr01GtOlmyCBaNs"
 if not mistral_api_key:
     raise ValueError("Mistral API key not found in configuration.")
 
-
 ###############################################################################
-#            Preklad celej odpovede do slovenčiny (dočasne zavreté)           #
+# Простейшие заглушки для перевода
 ###############################################################################
 def translate_to_slovak(text: str) -> str:
     return text
 
-
-###############################################################################
-#   Funkcia pre preklad popisu lieku so zachovaním názvu (do dvojbodky)      #
-###############################################################################
 def translate_preserving_medicine_names(text: str) -> str:
     return text
 
+###############################################################################
+#       Funkcia pre vyhodnotenie úplnosti odpovede podľa kritérií              #
+###############################################################################
+def evaluate_complete_answer(query: str, answer: str) -> dict:
+    evaluation_prompt = (
+        f"Vyhodnoť nasledujúcu odpoveď na základe týchto kritérií:\n"
+        f"1. Odpoveď obsahuje odporúčania liekov vrátane názvu, stručného vysvetlenia a, ak bolo žiadané, aj dávkovanie alebo čas užívania.\n"
+        f"2. Ak otázka obsahovala dodatočné požiadavky, odpoveď má samostatnú časť, ktorá tieto požiadavky rieši.\n\n"
+        f"Otázka: '{query}'\n"
+        f"Odpoveď: '{answer}'\n\n"
+        "Na základe týchto kritérií daj odpovedi hodnotenie od 0 do 10, kde 10 znamená, že odpoveď je úplne logická a obsahuje všetky požadované informácie. "
+        "Vráť len číslo."
+    )
+    score_str = llm_small.generate_text(prompt=evaluation_prompt, max_tokens=50, temperature=0.3)
+    try:
+        score = float(score_str.strip())
+    except Exception as e:
+        logger.error(f"Error parsing evaluation score: {e}")
+        score = 0.0
+    return {"rating": round(score, 2), "explanation": "Evaluation based on required criteria."}
+###############################################################################
+#             Validácia logiky odpovede voči pôvodnej otázke                #
+###############################################################################
+def validate_answer_logic(query: str, answer: str) -> str:
+    validation_prompt = (
+        f"Otázka: '{query}'\n"
+        f"Odpoveď: '{answer}'\n\n"
+        "Analyzuj prosím túto odpoveď. Ak odpoveď neobsahuje všetky dodatočné informácie, na ktoré sa pýtal používateľ, "
+        "alebo ak odporúčania liekov nie sú úplné (napr. chýba dávkovanie alebo čas užívania, ak boli takéto požiadavky v otázke), "
+        "vytvor opravenú odpoveď, ktorá je logicky konzistentná s otázkou. "
+        "Odpovedz v slovenčine a iba čistou, konečnou odpoveďou bez ďalších komentárov."
+    )
+    try:
+        validated_answer = llm_small.generate_text(prompt=validation_prompt, max_tokens=500, temperature=0.5)
+        logger.info(f"Validated answer: {validated_answer}")
+        return validated_answer
+    except Exception as e:
+        logger.error(f"Error during answer validation: {e}")
+        return answer
+
+
 
 ###############################################################################
-#        Formovanie dynamického promptu pre generovanie odpovede              #
+# Функция формирования динамического промпта с учётом истории
 ###############################################################################
 def build_dynamic_prompt(query: str, documents: list) -> str:
+    # Spojí dokumenty do jedného textu
     documents_str = "\n".join(documents)
+    # Vytvorí prompt, ktorý obsahuje otázku a inštrukcie pre generovanie odpovede
     prompt = (
         f"Otázka: '{query}'.\n"
         "Na základe nasledujúcich informácií o liekoch:\n"
@@ -57,10 +95,8 @@ def build_dynamic_prompt(query: str, documents: list) -> str:
     )
     return prompt
 
-
-
 ###############################################################################
-#                             Custom Mistral LLM                              #
+# Класс для вызова Mistral LLM
 ###############################################################################
 class CustomMistralLLM:
     def __init__(self, api_key: str, endpoint_url: str, model_name: str):
@@ -95,26 +131,25 @@ class CustomMistralLLM:
                 else:
                     logger.error(f"HTTP Error: {e}")
                     raise e
-            except Exception as e:
-                logger.error(f"Error: {str(e)}")
-                raise e
+            except Exception as ex:
+                logger.error(f"Error: {str(ex)}")
+                raise ex
         raise Exception("Reached maximum number of retries for API request")
 
-
 ###############################################################################
-#                 Initialize embeddings and Elasticsearch store               #
+# Инициализация Embeddings и Elasticsearch
 ###############################################################################
 logger.info("Loading HuggingFaceEmbeddings model...")
 embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
 
-index_name = 'drug_docs'
+index_name = "drug_docs"
 
 if config.get("useCloud", False):
     logger.info("Using cloud Elasticsearch.")
     cloud_id = "tt:dXMtZWFzdC0yLmF3cy5lbGFzdGljLWNsb3VkLmNvbTo0NDMkOGM3ODQ0ZWVhZTEyNGY3NmFjNjQyNDFhNjI4NmVhYzMkZTI3YjlkNTQ0ODdhNGViNmEyMTcxMjMxNmJhMWI0ZGU="
     vectorstore = ElasticsearchStore(
         es_cloud_id=cloud_id,
-        index_name='drug_docs',
+        index_name=index_name,
         embedding=embeddings,
         es_user="elastic",
         es_password="sSz2BEGv56JRNjGFwoQ191RJ"
@@ -127,33 +162,34 @@ else:
         embedding=embeddings,
     )
 
-logger.info(f"Connected to {'cloud' if config.get('useCloud', False) else 'local'} Elasticsearch.")
+logger.info("Connected to Elasticsearch.")
 
 ###############################################################################
-#                 Initialize Mistral models (small & large)                   #
+# Инициализация LLM small & large
 ###############################################################################
 llm_small = CustomMistralLLM(
     api_key=mistral_api_key,
     endpoint_url="https://api.mistral.ai/v1/chat/completions",
     model_name="mistral-small-latest"
 )
-
 llm_large = CustomMistralLLM(
     api_key=mistral_api_key,
     endpoint_url="https://api.mistral.ai/v1/chat/completions",
     model_name="mistral-large-latest"
 )
 
-
 ###############################################################################
-# Funkcia pre klasifikáciu dopytu (vyhľadávanie vs. upresnenie) – na slovenčine
+# Функция классификации: vyhľadávanie vs. upresnenie
 ###############################################################################
 def classify_query(query: str) -> str:
     prompt = (
         "Ty si zdravotnícky expert, ktorý analyzuje otázky používateľov. "
-        "Analyzuj nasledujúci dopyt a urči, či ide o dopyt na vyhľadanie liekov alebo o upresnenie/doplnenie už poskytnutej odpovede.\n"
-        "Ak dopyt obsahuje výrazy ako 'čo pit', 'aké lieky', 'odporuč liek', 'hľadám liek', odpovedaj slovom 'vyhľadávanie'.\n"
-        "Ak dopyt slúži na upresnenie, napríklad obsahuje výrazy ako 'a nie na predpis', 'upresni', 'este raz', odpovedaj slovom 'upresnenie'.\n"
+        "Analyzuj nasledujúci dopyt a urči, či ide o dopyt na vyhľadanie liekov alebo "
+        "o upresnenie/doplnenie už poskytnutej odpovede.\n"
+        "Ak dopyt obsahuje výrazy ako 'čo pit', 'aké lieky', 'odporuč liek', 'hľadám liek', "
+        "odpovedaj slovom 'vyhľadávanie'.\n"
+        "Ak dopyt slúži na upresnenie, napríklad obsahuje výrazy ako 'a nie na predpis', "
+        "'upresni', 'este raz', odpovedaj slovom 'upresnenie'.\n"
         f"Dopyt: \"{query}\""
     )
     classification = llm_small.generate_text(prompt=prompt, max_tokens=20, temperature=0.3)
@@ -163,58 +199,47 @@ def classify_query(query: str) -> str:
         return "vyhľadávanie"
     elif "upresnenie" in classification:
         return "upresnenie"
-    return "vyhľadávanie"  # Predvolená možnosť
-
-
-###############################################################################
-#       Funkcia pre vyhodnotenie úplnosti odpovede podľa kritérií              #
-###############################################################################
-def evaluate_complete_answer(query: str, answer: str) -> dict:
-    evaluation_prompt = (
-        f"Vyhodnoť nasledujúcu odpoveď na základe týchto kritérií:\n"
-        f"1. Odpoveď obsahuje odporúčania liekov vrátane názvu, stručného vysvetlenia a, ak bolo žiadané, aj dávkovanie alebo čas užívania.\n"
-        f"2. Ak otázka obsahovala dodatočné požiadavky, odpoveď má samostatnú časť, ktorá tieto požiadavky rieši.\n\n"
-        f"Otázka: '{query}'\n"
-        f"Odpoveď: '{answer}'\n\n"
-        "Na základe týchto kritérií daj odpovedi hodnotenie od 0 do 10, kde 10 znamená, že odpoveď je úplne logická a obsahuje všetky požadované informácie. "
-        "Vráť len číslo."
-    )
-    score_str = llm_small.generate_text(prompt=evaluation_prompt, max_tokens=50, temperature=0.3)
-    try:
-        score = float(score_str.strip())
-    except Exception as e:
-        logger.error(f"Error parsing evaluation score: {e}")
-        score = 0.0
-    return {"rating": round(score, 2), "explanation": "Evaluation based on required criteria."}
-
+    return "vyhľadávanie"  # fallback
 
 ###############################################################################
-#             Validácia logiky odpovede voči pôvodnej otázke                #
+# Шаблон для upresnenia: модель возвращает либо FOUND_IN_HISTORY, либо NO_ANSWER_IN_HISTORY
 ###############################################################################
-def validate_answer_logic(query: str, answer: str) -> str:
-    validation_prompt = (
-        f"Otázka: '{query}'\n"
-        f"Odpoveď: '{answer}'\n\n"
-        "Analyzuj prosím túto odpoveď. Ak odpoveď neobsahuje všetky dodatočné informácie, na ktoré sa pýtal používateľ, "
-        "alebo ak odporúčania liekov nie sú úplné (napr. chýba dávkovanie alebo čas užívania, ak boli takéto požiadavky v otázke), "
-        "vytvor opravenú odpoveď, ktorá je logicky konzistentná s otázkou. "
-        "Odpovedz v slovenčine a iba čistou, konečnou odpoveďou bez ďalších komentárov."
-    )
-    try:
-        validated_answer = llm_small.generate_text(prompt=validation_prompt, max_tokens=500, temperature=0.5)
-        logger.info(f"Validated answer: {validated_answer}")
-        return validated_answer
-    except Exception as e:
-        logger.error(f"Error during answer validation: {e}")
-        return answer
+def build_upresnenie_prompt_no_history(chat_history: str, user_query: str) -> str:
+    prompt = f"""
+Ty si zdravotnícky expert. Máš k dispozícii históriu chatu a novú upresňujúcu otázku.
 
+Ak v histórii chatu už existuje jasná odpoveď na túto upresňujúcu otázku, napíš:
+"FOUND_IN_HISTORY: <ľudský vysvetľujúci text>"
+
+Ak však v histórii chatu nie je dostatok informácií, napíš:
+"NO_ANSWER_IN_HISTORY: <krátky vyhľadávací dotaz do Elasticsearch>"
+
+V časti <krátky vyhľadávací dotaz> zahrň kľúčové slová z pôvodnej otázky aj z upresnenia.
+
+=== ZAČIATOK HISTÓRIE CHatu ===
+{chat_history}
+=== KONIEC HISTÓRIE CHatu ===
+
+Upresňujúca otázka od používateľa:
+"{user_query}"
+"""
+    return prompt
 
 ###############################################################################
-#         Implementácia agenta s dlhodobou pamäťou a analýzou vstupu          #
+# Функция извлечения последнего vyhľadávacieho dopytu из истории
+###############################################################################
+def extract_last_vyhladavacie_query(chat_history: str) -> str:
+    lines = chat_history.splitlines()
+    for line in reversed(lines):
+        if line.startswith("User:"):
+            return line[len("User:"):].strip()
+    return ""
+
+###############################################################################
+# Класс агента для хранения údajov (vek, anamnéza, predpis)
 ###############################################################################
 class ConversationalAgent:
     def __init__(self):
-        # Základná dlhodobá pamäť – kľúče nastavíme podľa potrieb
         self.long_term_memory = {
             "vek": None,
             "anamneza": None,
@@ -228,11 +253,6 @@ class ConversationalAgent:
         return self.long_term_memory.get(key, None)
 
     def load_memory_from_history(self, chat_history: str):
-        """
-        Ak v histórii chatu existuje blok s uloženou pamäťou vo formáte:
-        [MEMORY]{"vek": "25", "anamneza": "...", "predpis": "..."}[/MEMORY]
-        tak sa táto pamäť načíta.
-        """
         memory_match = re.search(r"\[MEMORY\](.*?)\[/MEMORY\]", chat_history, re.DOTALL)
         if memory_match:
             try:
@@ -240,26 +260,19 @@ class ConversationalAgent:
                 self.long_term_memory.update(memory_data)
                 logger.info(f"Nahraná pamäť z histórie: {self.long_term_memory}")
             except Exception as e:
-                logger.error(f"Chyba pri načítaní pamäte z histórie: {e}")
+                logger.error(f"Chyba pri načítaní pamäte: {e}")
 
     def parse_user_info(self, query: str):
-        """
-        Dynamický parsing informácií z dopytu – hľadáme základné informácie:
-        vek, anamnézu a informáciu o predpise.
-        """
         text_lower = query.lower()
-        # 1) Vek – hľadáme číslo (napr. "20 rokov")
         age_match = re.search(r"(\d{1,3})\s*(rok(ov|y)?|years?)?", text_lower)
         if age_match and not self.get_memory("vek"):
             self.update_memory("vek", age_match.group(1))
-        # 2) Anamnéza – zisťujeme informácie o chronických ochoreniach či alergiách
         if (("nemá" in text_lower or "nema" in text_lower) and ("chronické" in text_lower or "alerg" in text_lower)):
             if not self.get_memory("anamneza"):
                 self.update_memory("anamneza", "Žiadne chronické ochorenia ani alergie")
         elif (("chronické" in text_lower or "alerg" in text_lower) and ("má" in text_lower or "ma" in text_lower)):
             if not self.get_memory("anamneza"):
                 self.update_memory("anamneza", "Má chronické ochorenie alebo alergie (nespecifikované)")
-        # 3) Predpis – zisťujeme, či je liek na predpis alebo voľnopredajný
         if "voľnopredajný" in text_lower:
             if not self.get_memory("predpis"):
                 self.update_memory("predpis", "volnopredajny")
@@ -268,14 +281,12 @@ class ConversationalAgent:
                 self.update_memory("predpis", "na predpis")
         else:
             if "predpis" in text_lower:
-                if ("nie" in text_lower or "nemam" in text_lower or "nemám" in text_lower) and not self.get_memory(
-                        "predpis"):
+                if ("nie" in text_lower or "nemam" in text_lower or "nemám" in text_lower) and not self.get_memory("predpis"):
                     self.update_memory("predpis", "volnopredajny")
                 elif not self.get_memory("predpis"):
                     self.update_memory("predpis", "na predpis")
 
     def analyze_input(self, query: str) -> dict:
-        # Extrahujeme informácie z aktuálneho dopytu
         self.parse_user_info(query)
         missing_info = {}
         if not self.get_memory("vek"):
@@ -287,34 +298,22 @@ class ConversationalAgent:
         return missing_info
 
     def ask_follow_up(self, missing_info: dict) -> str:
-        questions = list(missing_info.values())
-        return " ".join(questions)
-
+        return " ".join(missing_info.values())
 
 ###############################################################################
-#           Hlavná funkcia: process_query_with_mistral (Slovak prompt)       #
+# Основная функция process_query_with_mistral
 ###############################################################################
-
-# URL nášho endpointu pre získanie detailov chatu
 CHAT_HISTORY_ENDPOINT = "http://localhost:5000/api/chat_history_detail"
 
-
-def process_query_with_mistral(query, chat_id, chat_context, k=10):
-    """
-    Обработка пользовательского запроса к боту:
-      1. Классификация запроса (vyhľadávanie vs. upresnenie).
-      2. Если upresnenie (уточнение) и есть история чата – уточняем ответ.
-      3. Если чат новый (история пустая), просим недостающие данные (возраст, анамнез, предписание).
-      4. Если нужные данные есть, запускаем обычную логику с векторным поиском и генерацией ответа.
-    """
+def process_query_with_mistral(query: str, chat_id: str, chat_context: str, k=10):
     logger.info("Processing query started.")
 
-    # 1. Классифицируем запрос
-    query_type = classify_query(query)
-    logger.info(f"Typ dopytu: {query_type}")
-    logger.info(f"HAART: {chat_context}")
+    # 1. Классификация
+    qtype = classify_query(query)
+    logger.info(f"Typ dopytu: {qtype}")
+    logger.info(f"Chat context (snippet): {chat_context[:200]}...")
 
-    # 2. Загружаем историю чата
+    # 2. Загрузка истории
     chat_history = ""
     if chat_context:
         chat_history = chat_context
@@ -326,160 +325,160 @@ def process_query_with_mistral(query, chat_id, chat_context, k=10):
                 data = r.json()
                 chat_data = data.get("chat", "")
                 if isinstance(chat_data, dict):
-                    # Если формат вернулся как словарь
                     chat_history = chat_data.get("chat", "")
                 else:
-                    # Иначе это просто строка
                     chat_history = chat_data or ""
-                logger.info(f"História chatu bola načítaná z endpointu pre chatId: {chat_id}")
+                logger.info(f"História chatu načítaná pre chatId: {chat_id}")
             else:
-                logger.warning(
-                    f"Nepodarilo sa načítať históriu chatu (status code: {r.status_code}) pre chatId: {chat_id}"
-                )
+                logger.warning(f"Nepodarilo sa načítať históriu (status {r.status_code}) pre chatId: {chat_id}")
         except Exception as e:
-            logger.error(f"Chyba pri načítaní histórie chatu cez endpoint: {e}")
+            logger.error(f"Chyba pri načítaní histórie: {e}")
 
-    # 3. Инициализация "агента" (обрабатывает память/контекст)
+    # 3. Инициализация агента и načítanie pamäti
     agent = ConversationalAgent()
     if chat_history:
         agent.load_memory_from_history(chat_history)
 
-    # 4. Уточнение (upresnenie), если история чата не пустая
-    if query_type == "upresnenie" and chat_history:
-        logger.info("Upresnenie dopytu – analyzujem históriu a generujem upresnenú odpoveď.")
-        upresnenie_prompt = (
-            "Ty si zdravotnícky expert, ktorý odpovedá výlučne priateľským, zdvorilým a profesionálnym tónom "
-            "bez akýchkoľvek pozdravov alebo zbytočných úvodných fráz. "
-            "Na základe nasledujúcej histórie chatu a nového dopytu vytvor stručnú, ale ucelenú odpoveď, "
-            "ktorá doplní alebo upresní už poskytnuté informácie.\n\n"
-            "História chatu:\n"
-            f"{chat_history}\n\n"
-            "Nový dopyt:\n"
-            f"{query}\n\n"
-            "Vygeneruj odpoveď, ktorá obsahuje všetky relevantné informácie."
-        )
-
-        # Генерируем уточнённый ответ
-        upresnená_odpoveď = llm_small.generate_text(
-            prompt=upresnenie_prompt,
-            max_tokens=1500,
-            temperature=0.5
-        )
-
-        final_answer = upresnená_odpoveď
-        return {
-            "best_answer": final_answer,
-            "model": "Upresnenie based",
-            "rating": 10,
-            "explanation": "Odpoveď vygenerovaná na základe analýzy histórie a upresnenia dopytu."
-        }
-
-    # 5. Если чат «новый» (история пустая), проверяем, не нужно ли у пользователя спросить возраст/анамнез/предписание.
+    # Если новый чат и недostatok údajov, požiadame o follow-up
     if not chat_history.strip():
         missing_info = agent.analyze_input(query)
         if missing_info:
-            # Возвращаем вопросы по недостающим данным и завершаем функцию
-            follow_up_question = agent.ask_follow_up(missing_info)
-            logger.info(f"Chýbajúce informácie (новý chat): {missing_info}")
+            follow_up = agent.ask_follow_up(missing_info)
+            logger.info(f"Chýbajúce informácie: {missing_info}")
             return {
-                "best_answer": follow_up_question,
-                "model": "Follow-up required (new chat)",
+                "best_answer": follow_up,
+                "model": "FollowUp (nový chat)",
                 "rating": 0,
-                "explanation": "Získajte doplňujúce informácie pre presnejšiu odpoveď."
+                "explanation": "Získajte doplňujúce informácie."
             }
 
-    # 6. Если мы дошли сюда, значит либо чат не новый, либо нужные поля уже есть.
-    #    Выполняем обычную логику: векторный поиск + генерация ответа.
+    # 4. Если upresnenie
+    if qtype == "upresnenie":
+        # Извлекаем последний vyhľadávací dopyt, если он есть
+        last_query = extract_last_vyhladavacie_query(chat_history)
+        combined_query = (last_query + " " + query).strip() if last_query else query
 
-    try:
-        # --- Vector search ---
-        vector_results = vectorstore.similarity_search(query, k=k)
-        vector_documents = [hit.metadata.get('text', '') for hit in vector_results]
-        max_docs = 5
-        max_doc_length = 1000
-        vector_documents = [doc[:max_doc_length] for doc in vector_documents[:max_docs]]
+        # Формируем upresňujúci промпт
+        upres_prompt = build_upresnenie_prompt_no_history(chat_history, combined_query)
+        response_str = llm_small.generate_text(upres_prompt, max_tokens=800, temperature=0.5)
+        normalized = response_str.strip()
+        lower_norm = normalized.lower()
+        logger.info(f"Upresnenie prompt response: {normalized}")
 
-        if vector_documents:
-            vector_prompt = build_dynamic_prompt(query, vector_documents)
-            summary_small_vector = llm_small.generate_text(
-                prompt=vector_prompt,
-                max_tokens=1200,
-                temperature=0.7
+        # Если модель вернула FOUND_IN_HISTORY
+        if re.match(r"(?i)^found_in_history:\s*", normalized):
+            parts = re.split(r"(?i)^found_in_history:\s*", normalized, maxsplit=1)
+            if len(parts) < 2:
+                return {
+                    "best_answer": normalized,
+                    "model": "Upresnenie-ParseError",
+                    "rating": 0,
+                    "explanation": "Model nevrátil správny formát (FOUND_IN_HISTORY:)."
+                }
+            final_answer = parts[1].strip()
+            return {
+                "best_answer": final_answer,
+                "model": "Upresnenie-FinalFromHistory",
+                "rating": 10,
+                "explanation": "Odpoveď bola nájdená v histórii."
+            }
+        # Если модель вернула NO_ANSWER_IN_HISTORY
+        elif re.match(r"(?i)^no_answer_in_history:\s*", normalized):
+            parts = re.split(r"(?i)^no_answer_in_history:\s*", normalized, maxsplit=1)
+            if len(parts) < 2:
+                return {
+                    "best_answer": normalized,
+                    "model": "Upresnenie-ParseError",
+                    "rating": 0,
+                    "explanation": "Model nevrátil správny formát (NO_ANSWER_IN_HISTORY:)."
+                }
+            search_query = parts[1].strip()
+            logger.info(f"Vyhľadávací dopyt z upresnenia: {search_query}")
+
+            # Выполняем поиск в Elasticsearch (как в obvyklom vyhľadávaní)
+            es_res = vectorstore.client.search(
+                index=index_name,
+                body={
+                    "size": k,
+                    "query": {
+                        "multi_match": {
+                            "query": search_query,
+                            "fields": ["text"]
+                        }
+                    }
+                }
             )
-            summary_large_vector = llm_large.generate_text(
-                prompt=vector_prompt,
-                max_tokens=1200,
-                temperature=0.7
+            hits = es_res["hits"]["hits"]
+            if not hits:
+                return {
+                    "best_answer": "Ľutujem, nenašli sa žiadne relevantné informácie.",
+                    "model": "Upresnenie-NoResults",
+                    "rating": 0,
+                    "explanation": "No results from search."
+                }
+            docs_texts = [h["_source"]["text"] for h in hits[:5]]
+            joined_docs = "\n".join(docs_texts)
+
+            # Теперь генерируем итоговый ответ с использованием обеих model (small и large)
+            final_prompt = (
+                f"Otázka (upresnenie): {combined_query}\n\n"
+                "Na základe týchto nájdených informácií:\n"
+                f"{joined_docs}\n\n"
+                "Vygeneruj odporúčanie liekov alebo vysvetlenie, ak je to relevantné."
             )
-            eval_small_vector = evaluate_complete_answer(query, summary_small_vector)
-            eval_large_vector = evaluate_complete_answer(query, summary_large_vector)
+            # Генерируем ответы от small и large
+            ans_small = llm_small.generate_text(final_prompt, max_tokens=800, temperature=0.7)
+            ans_large = llm_large.generate_text(final_prompt, max_tokens=800, temperature=0.7)
+            # Валидируем ответы
+            val_small = validate_answer_logic(combined_query, ans_small)
+            val_large = validate_answer_logic(combined_query, ans_large)
+            # Оцениваем
+            eval_small = evaluate_complete_answer(combined_query, val_small)
+            eval_large = evaluate_complete_answer(combined_query, val_large)
+            candidates = [
+                {"summary": val_small, "eval": eval_small, "model": "Mistral Small"},
+                {"summary": val_large, "eval": eval_large, "model": "Mistral Large"},
+            ]
+            best = max(candidates, key=lambda x: x["eval"]["rating"])
+            logger.info(f"Odpoveď od modelu {best['model']} má rating: {best['eval']['rating']}/10")
+            final_answer = translate_preserving_medicine_names(best["summary"])
+            return {
+                "best_answer": final_answer,
+                "model": best["model"],
+                "rating": best["eval"]["rating"],
+                "explanation": best["eval"]["explanation"]
+            }
         else:
-            eval_small_vector = {"rating": 0, "explanation": "No results"}
-            eval_large_vector = {"rating": 0, "explanation": "No results"}
-            summary_small_vector = ""
-            summary_large_vector = ""
+            return {
+                "best_answer": response_str,
+                "model": "Upresnenie-ParseError",
+                "rating": 0,
+                "explanation": "Model nevrátil očakávaný formát (FOUND_IN_HISTORY alebo NO_ANSWER_IN_HISTORY)."
+            }
 
-        # --- Text search ---
-        es_results = vectorstore.client.search(
-            index=index_name,
-            body={"size": k, "query": {"match": {"text": query}}}
-        )
-        text_documents = [hit['_source'].get('text', '') for hit in es_results['hits']['hits']]
-        text_documents = [doc[:max_doc_length] for doc in text_documents[:max_docs]]
-
-        if text_documents:
-            text_prompt = build_dynamic_prompt(query, text_documents)
-            summary_small_text = llm_small.generate_text(
-                prompt=text_prompt,
-                max_tokens=700,
-                temperature=0.7
-            )
-            summary_large_text = llm_large.generate_text(
-                prompt=text_prompt,
-                max_tokens=700,
-                temperature=0.7
-            )
-            eval_small_text = evaluate_complete_answer(query, summary_small_text)
-            eval_large_text = evaluate_complete_answer(query, summary_large_text)
-        else:
-            eval_small_text = {"rating": 0, "explanation": "No results"}
-            eval_large_text = {"rating": 0, "explanation": "No results"}
-            summary_small_text = ""
-            summary_large_text = ""
-
-        # Сравниваем результаты всех моделей/подходов
-        all_results = [
-            {"eval": eval_small_vector, "summary": summary_small_vector, "model": "Mistral Small Vector"},
-            {"eval": eval_large_vector, "summary": summary_large_vector, "model": "Mistral Large Vector"},
-            {"eval": eval_small_text, "summary": summary_small_text, "model": "Mistral Small Text"},
-            {"eval": eval_large_text, "summary": summary_large_text, "model": "Mistral Large Text"},
-        ]
-
-        # Выбираем результат с максимальным рейтингом
-        best_result = max(all_results, key=lambda x: x["eval"]["rating"])
-        logger.info(
-            f"Najlepší výsledok z modelu {best_result['model']} "
-            f"s hodnotením {best_result['eval']['rating']}."
-        )
-
-        # Валидируем логику ответа
-        validated_answer = validate_answer_logic(query, best_result["summary"])
-        # Дополнительный «полиш» для перевода / сохранения названий
-        polished_answer = translate_preserving_medicine_names(validated_answer)
-
-        final_answer = polished_answer
-
+    # 5. Если to je obyčajné vyhľadávanie
+    vector_results = vectorstore.similarity_search(query, k=k)
+    max_docs = 5
+    max_len = 1000
+    vector_docs = [hit.metadata.get("text", "")[:max_len] for hit in vector_results[:max_docs]]
+    if not vector_docs:
         return {
-            "best_answer": final_answer,
-            "model": best_result["model"],
-            "rating": best_result["eval"]["rating"],
-            "explanation": best_result["eval"]["explanation"]
+            "best_answer": "Ľutujem, nenašli sa žiadne relevantné informácie.",
+            "model": "Vyhladavanie-NoDocs",
+            "rating": 0,
+            "explanation": "No results"
         }
-
-    except Exception as e:
-        logger.error(f"Error: {str(e)}")
-        return {
-            "best_answer": "An error occurred during query processing.",
-            "error": str(e)
-        }
-
+    joined_docs = "\n".join(vector_docs)
+    final_prompt = (
+        f"Otázka: {query}\n\n"
+        "Na základe týchto informácií:\n"
+        f"{joined_docs}\n\n"
+        "Vygeneruj odporúčanie liekov alebo vysvetlenie, ak je to relevantné."
+    )
+    answer = llm_small.generate_text(final_prompt, max_tokens=800, temperature=0.7)
+    return {
+        "best_answer": answer,
+        "model": "Vyhladavanie-Final",
+        "rating": 9,
+        "explanation": "Vyhľadávacia cesta"
+    }

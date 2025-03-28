@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Box, Typography, Paper } from '@mui/material';
+import { Box, Typography, Paper, IconButton } from '@mui/material';
+import DeleteIcon from '@mui/icons-material/Delete';
 
 interface ChatHistoryItem {
     id: number;
@@ -37,6 +38,25 @@ const ChatHistory: React.FC = () => {
         navigate(`/dashboard/chat/${item.id}`, { state: { selectedChat: item } });
     };
 
+    // Функция для удаления чата
+    const handleDelete = (chatId: number) => {
+        if (window.confirm('Are you sure that you want to delete that chat?')) {
+            fetch(`http://localhost:5000/api/chat_history?id=${chatId}`, {
+                method: 'DELETE'
+            })
+                .then((res) => res.json())
+                .then((data) => {
+                    if (data.error) {
+                        setError(data.error);
+                    } else {
+                        // Обновляем состояние, удаляя удалённый чат
+                        setHistory(history.filter((chat) => chat.id !== chatId));
+                    }
+                })
+                .catch(() => setError('Ошибка при удалении чата'));
+        }
+    };
+
     return (
         <Box
             sx={{
@@ -46,14 +66,13 @@ const ChatHistory: React.FC = () => {
                 background: '#f5f5f5',
                 boxSizing: 'border-box',
                 p: 3,
-
-                /* Hide scrollbar for Chrome, Safari and Opera */
+                /* Скрыть скроллбар для Chrome, Safari и Opera */
                 '&::-webkit-scrollbar': {
                     display: 'none',
                 },
-                /* Hide scrollbar for IE, Edge and Firefox */
-                '-ms-overflow-style': 'none',  // IE and Edge
-                'scrollbarWidth': 'none',      // Firefox
+                /* Скрыть скроллбар для IE, Edge и Firefox */
+                '-ms-overflow-style': 'none',
+                'scrollbarWidth': 'none',
             }}
         >
             <Typography
@@ -99,15 +118,14 @@ const ChatHistory: React.FC = () => {
                                         cursor: 'pointer',
                                         transition: 'box-shadow 0.3s ease',
                                         '&:hover': { boxShadow: 6 },
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
                                     }}
-                                    onClick={() => handleClick(item)}
                                 >
                                     <Box
-                                        sx={{
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            alignItems: 'center',
-                                        }}
+                                        sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}
+                                        onClick={() => handleClick(item)}
                                     >
                                         <Typography
                                             variant="subtitle1"
@@ -122,6 +140,15 @@ const ChatHistory: React.FC = () => {
                                             {new Date(item.created_at).toLocaleString()}
                                         </Typography>
                                     </Box>
+                                    <IconButton
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDelete(item.id);
+                                        }}
+                                        sx={{ color: '#d32f2f' }}
+                                    >
+                                        <DeleteIcon />
+                                    </IconButton>
                                 </Paper>
                             );
                         })

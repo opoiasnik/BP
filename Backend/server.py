@@ -239,7 +239,18 @@ def get_chat_history():
         return jsonify({'history': history}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
+@app.route('/api/chat_history', methods=['DELETE'])
+def delete_chat():
+    chat_id = request.args.get('id')
+    if not chat_id:
+        return jsonify({'error': 'Chat id is required'}), 400
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM chat_history WHERE id = %s", (chat_id,))
+            conn.commit()
+        return jsonify({'message': 'Chat deleted successfully'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 @app.route('/api/chat_history_detail', methods=['GET'])
 def chat_history_detail():
     chat_id = request.args.get('id')
