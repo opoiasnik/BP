@@ -10,7 +10,6 @@ const About: React.FC = () => {
     const [user, setUser] = useState<any>(null);
     const navigate = useNavigate();
 
-    // Load user data from localStorage to pass to the Navbar
     useEffect(() => {
         const storedUser = localStorage.getItem('user');
         if (storedUser) {

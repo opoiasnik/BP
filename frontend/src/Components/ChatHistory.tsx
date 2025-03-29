@@ -38,7 +38,6 @@ const ChatHistory: React.FC = () => {
         navigate(`/dashboard/chat/${item.id}`, { state: { selectedChat: item } });
     };
 
-    // Функция для удаления чата
     const handleDelete = (chatId: number) => {
         if (window.confirm('Are you sure that you want to delete that chat?')) {
             fetch(`http://localhost:5000/api/chat_history?id=${chatId}`, {
@@ -53,7 +52,7 @@ const ChatHistory: React.FC = () => {
                         setHistory(history.filter((chat) => chat.id !== chatId));
                     }
                 })
-                .catch(() => setError('Ошибка при удалении чата'));
+                .catch(() => setError('Error deleting chat'));
         }
     };
 
@@ -66,11 +65,9 @@ const ChatHistory: React.FC = () => {
                 background: '#f5f5f5',
                 boxSizing: 'border-box',
                 p: 3,
-                /* Скрыть скроллбар для Chrome, Safari и Opera */
                 '&::-webkit-scrollbar': {
                     display: 'none',
                 },
-                /* Скрыть скроллбар для IE, Edge и Firefox */
                 '-ms-overflow-style': 'none',
                 'scrollbarWidth': 'none',
             }}

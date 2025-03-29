@@ -8,7 +8,7 @@ import logging
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
-# Импортujeme funkciu process_query_with_mistral z model.py
+# Importujeme funkciu process_query_with_mistral z model.py
 from model import process_query_with_mistral
 
 # Pôvodné nastavenie času
@@ -19,17 +19,10 @@ time.time = lambda: _real_time() - 1
 DATABASE_CONFIG = {
     "dbname": "HealthAIDB",
     "user": "postgres",
-    "password": "Oleg2005",  # alebo "" ak bez hesla
+    "password": "Oleg2005",
     "host": "localhost",
     "port": 5432,
 }
-# DATABASE_CONFIG = {
-#     "dbname": "postgres",
-#     "user": "postgres",
-#     "password": "healthai!",
-#     "host": "health-ai-user-db.cxeum6cmct3r.eu-west-1.rds.amazonaws.com",
-#     "port": 5432,
-# }
 
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -231,6 +224,7 @@ def save_user_data():
         logger.error(f"Ошибка при обновлении данных пользователя: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
+
 @app.route('/api/chat_history', methods=['GET'])
 def get_chat_history():
     logger.info("Получен запрос на получение истории чата")
@@ -262,6 +256,22 @@ def delete_chat():
         return jsonify({'message': 'Chat deleted successfully'}), 200
     except Exception as e:
         logger.error(f"Ошибка при удалении чата с chatId {chat_id}: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+@app.route('/api/get_user_data', methods=['GET'])
+def get_user_data():
+    chat_id = request.args.get('chatId')
+    if not chat_id:
+        return jsonify({'error': 'Chat id is required'}), 400
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT user_data FROM chat_history WHERE id = %s", (chat_id,))
+            result = cur.fetchone()
+        if result and result.get("user_data"):
+            return jsonify({'user_data': result.get("user_data")}), 200
+        else:
+            return jsonify({'user_data': None}), 200
+    except Exception as e:
+        logger.error(f"Error retrieving user_data: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/chat_history_detail', methods=['GET'])

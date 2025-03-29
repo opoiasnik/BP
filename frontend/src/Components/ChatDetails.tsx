@@ -15,7 +15,6 @@ const ChatDetails: React.FC = () => {
 
     useEffect(() => {
         if (!chat && id) {
-            // Если данные не переданы через state, можно попробовать получить их с сервера
             fetch(`http://localhost:5000/api/chat_history_detail?id=${encodeURIComponent(id)}`)
                 .then((res) => {
                     if (!res.ok) {
