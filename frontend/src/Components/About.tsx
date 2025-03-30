@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Typography, Grid, Paper } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import {Navbar} from '../pages/LandingPage'; // Make sure Navbar is exported from your components folder
+import {Navbar} from '../pages/LandingPage';
 import MedicalServicesIcon from '@mui/icons-material/MedicalServices';
 import LocalHospitalIcon from '@mui/icons-material/LocalHospital';
 import CodeIcon from '@mui/icons-material/Code';

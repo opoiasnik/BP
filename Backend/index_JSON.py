@@ -8,7 +8,7 @@ es = Elasticsearch([{'host': 'localhost', 'port': 9200, 'scheme': 'http'}])
 embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
 
 def create_index():
-    # Определяем маппинг для индекса
+
     mapping = {
         "mappings": {
             "properties": {
@@ -18,11 +18,11 @@ def create_index():
                 },
                 "vector": {
                     "type": "dense_vector",
-                    "dims": 384  # Размерность векторного представления
+                    "dims": 384
                 },
                 "full_data": {
                     "type": "object",
-                    "enabled": False  # Отключаем индексацию вложенных данных
+                    "enabled": False
                 }
             }
         }
@@ -53,19 +53,15 @@ def index_documents(data):
         }
         actions.append(action)
 
-        # Отображение прогресса
-        print(f"Индексируется документ {i}/{total_docs}", end='\r')
 
-        # Опционально: индексируем пакетами по N документов
+
         if i % 100 == 0 or i == total_docs:
             bulk(es, actions)
             actions = []
 
-    # Если остались неиндексированные документы
     if actions:
         bulk(es, actions)
 
-    print("\nИндексирование завершено.")
 
 if __name__ == "__main__":
     create_index()

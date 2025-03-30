@@ -44,10 +44,7 @@ const HomePage: React.FC = () => {
         }
     }, [isNewChat, selectedChat]);
 
-    /**
-     * Функция форматирования сообщения.
-     * Если в ответе отсутствуют символы перевода строки, пытаемся разбить текст по нумерованным пунктам.
-     */
+
     const formatMessage = (text: string) => {
         let lines: string[] = [];
 

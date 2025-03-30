@@ -14,7 +14,7 @@ from psycopg2.extras import RealDictCursor
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Загрузка конфигурации
+
 config_file_path = "config.json"
 with open(config_file_path, 'r') as config_file:
     config = json.load(config_file)
@@ -24,7 +24,7 @@ if not mistral_api_key:
     raise ValueError("Mistral API key not found in configuration.")
 
 ###############################################################################
-# Простые функции для перевода (stub)
+# Simple functions for translation (stub)
 ###############################################################################
 def translate_to_slovak(text: str) -> str:
     return text
@@ -33,7 +33,7 @@ def translate_preserving_medicine_names(text: str) -> str:
     return text
 
 ###############################################################################
-# Функция для оценки полноты ответа
+# Function for evaluating the completeness of the answer
 ###############################################################################
 def evaluate_complete_answer(query: str, answer: str) -> dict:
     evaluation_prompt = (
@@ -54,7 +54,7 @@ def evaluate_complete_answer(query: str, answer: str) -> dict:
     return {"rating": round(score, 2), "explanation": "Evaluation based on required criteria."}
 
 ###############################################################################
-# Функция для валидации логики ответа
+# Function for validating the response logic
 ###############################################################################
 def validate_answer_logic(query: str, answer: str) -> str:
     validation_prompt = (
@@ -74,7 +74,7 @@ def validate_answer_logic(query: str, answer: str) -> str:
         return answer
 
 ###############################################################################
-# Функция для составления динамического промпта с информацией из документов
+# Function for creating a dynamic prompt with information from documents
 ###############################################################################
 def build_dynamic_prompt(query: str, documents: list) -> str:
     documents_str = "\n".join(documents)
@@ -92,7 +92,7 @@ def build_dynamic_prompt(query: str, documents: list) -> str:
     return prompt
 
 ###############################################################################
-# Функция для получения данных пользователя из БД через эндпоинт /api/get_user_data
+#  Function to get user data from the database via endpoint /api/get_user_data
 ###############################################################################
 def get_user_data_from_db(chat_id: str) -> str:
     try:
@@ -107,7 +107,7 @@ def get_user_data_from_db(chat_id: str) -> str:
     return ""
 
 ###############################################################################
-# Класс для вызова Mistral LLM
+#  Class for calling Mistral LLM
 ###############################################################################
 class CustomMistralLLM:
     def __init__(self, api_key: str, endpoint_url: str, model_name: str):
@@ -148,7 +148,7 @@ class CustomMistralLLM:
         raise Exception("Reached maximum number of retries for API request")
 
 ###############################################################################
-# Инициализация Embeddings и Elasticsearch
+# Initialisation of Embeddings and Elasticsearch
 ###############################################################################
 logger.info("Loading HuggingFaceEmbeddings model...")
 embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
@@ -175,7 +175,7 @@ else:
 logger.info("Connected to Elasticsearch.")
 
 ###############################################################################
-# Инициализация LLM small & large
+#  Initialisation of LLM small & large
 ###############################################################################
 llm_small = CustomMistralLLM(
     api_key=mistral_api_key,
@@ -189,7 +189,7 @@ llm_large = CustomMistralLLM(
 )
 
 ###############################################################################
-# Функция классификации запроса: vyhladavanie vs. upresnenie
+# Request classification function: vyhladavanie vs. upresnenie
 ###############################################################################
 def classify_query(query: str, chat_history: str = "") -> str:
     if not chat_history.strip():
@@ -207,14 +207,14 @@ def classify_query(query: str, chat_history: str = "") -> str:
     classification = llm_small.generate_text(prompt=prompt, max_tokens=20, temperature=0.3)
     classification = classification.strip().lower()
     logger.info(f"Klasifikácia dopytu: {classification}")
-    if "vyhľadávanie" in classification:
+    if "vyhládzanie" in classification or "vyhľadávanie" in classification:
         return "vyhladavanie"
     elif "upresnenie" in classification:
         return "upresnenie"
     return "vyhladavanie"
 
 ###############################################################################
-# Шаблон для upresnenie dopytu
+# Template for upresnenie dopytu
 ###############################################################################
 def build_upresnenie_prompt_no_history(chat_history: str, user_query: str) -> str:
     prompt = f"""
@@ -238,17 +238,19 @@ Upresňujúca otázka od používateľa:
     return prompt
 
 ###############################################################################
-# Функция для извлечения последнего vyhladavacieho dopytu z histórie
+# Function for retrieving the last vyhladavacieho dopytu z histórie
 ###############################################################################
 def extract_last_vyhladavacie_query(chat_history: str) -> str:
     lines = chat_history.splitlines()
+    last_query = ""
     for line in reversed(lines):
         if line.startswith("User:"):
-            return line[len("User:"):].strip()
-    return ""
+            last_query = line[len("User:"):].strip()
+            break
+    return last_query
 
 ###############################################################################
-# Класс агента для хранения данных: vek, anamneza, predpis, user_data, search_query
+# Agent class for data storage: vek, anamneza, predpis, user_data, search_query
 ###############################################################################
 class ConversationalAgent:
     def __init__(self):
@@ -278,7 +280,6 @@ class ConversationalAgent:
 
     def parse_user_info(self, query: str):
         text_lower = query.lower()
-        # Если во входном тексте присутствуют данные (napr. vek), обновляем локально user_data
         if re.search(r"\d+\s*(rok(ov|y)?|years?)", text_lower):
             self.update_memory("user_data", query)
         age_match = re.search(r"(\d{1,3})\s*(rok(ov|y)?|years?)", text_lower)
@@ -308,14 +309,14 @@ class ConversationalAgent:
         return " ".join(missing_info.values())
 
 ###############################################################################
-# Главная функция process_query_with_mistral с обновлённой логикой
+# Main function process_query_with_mistral with updated logic
 ###############################################################################
 CHAT_HISTORY_ENDPOINT = "http://localhost:5000/api/chat_history_detail"
 
 def process_query_with_mistral(query: str, chat_id: str, chat_context: str, k=10):
     logger.info("Processing query started.")
 
-    # 1. Загрузка истории чата
+
     chat_history = ""
     if chat_context:
         chat_history = chat_context
@@ -336,35 +337,35 @@ def process_query_with_mistral(query: str, chat_id: str, chat_context: str, k=10
         except Exception as e:
             logger.error(f"Chyba pri načítaní histórie: {e}")
 
-    # 2. Инициализация агента и загрузка памяти из истории
+
     agent = ConversationalAgent()
     if chat_history:
         agent.load_memory_from_history(chat_history)
 
-    # Получаем текущие данные пользователя из БД
+
     existing_user_data = ""
     if chat_id:
         existing_user_data = get_user_data_from_db(chat_id)
 
-    # Обновляем локальную память на основе текущего запроса
+
     agent.parse_user_info(query)
     missing_info = agent.analyze_input(query)
 
-    # Если данные пользователя уже есть в БД (не пусты), то не обновляем их
+
     if not existing_user_data:
-        # Если в истории чата содержится вопрос о данных, считаем, что это ответ на него и обновляем данные в БД
+
         if "Prosím, uveďte vek pacienta" in chat_history:
             if chat_id:
                 update_payload = {"chatId": chat_id, "userData": query}
                 try:
                     update_response = requests.post("http://localhost:5000/api/save_user_data", json=update_payload)
                     if update_response.status_code == 200:
-                        logger.info("Данные пользователя успешно обновлены через endpoint /api/save_user_data (data question flag).")
+                        logger.info("User data was successfully updated via endpoint /api/save_user_data (data question flag).")
                     else:
-                        logger.warning(f"Не удалось обновить данные (data question flag): {update_response.text}")
+                        logger.warning(f"Failed to update data (data question flag): {update_response.text}")
                 except Exception as e:
-                    logger.error(f"Ошибка при обновлении user_data через endpoint (data question flag): {e}")
-        # Если обнаружены недостающие данные (первая итерация), обновляем данные в БД
+                    logger.error(f"Error when updating user_data via endpoint (data question flag): {e}")
+
         if missing_info:
             logger.info(f"Chýbajúce informácie: {missing_info}")
             combined_missing_text = " ".join(missing_info.values())
@@ -374,37 +375,39 @@ def process_query_with_mistral(query: str, chat_id: str, chat_context: str, k=10
                     try:
                         update_response = requests.post("http://localhost:5000/api/save_user_data", json=update_payload)
                         if update_response.status_code == 200:
-                            logger.info("Данные пользователя успешно обновлены через endpoint /api/save_user_data.")
+                            logger.info("User data was successfully updated via endpoint /api/save_user_data.")
                         else:
-                            logger.warning(f"Не удалось обновить данные: {update_response.text}")
+                            logger.warning(f"Failed to update the data: {update_response.text}")
                     except Exception as e:
-                        logger.error(f"Ошибка при обновлении user_data через endpoint: {e}")
+                        logger.error(f"Error when updating user_data via endpoint: {e}")
             return {
                 "best_answer": combined_missing_text,
-                "model": "FollowUp (новый чат)",
+                "model": "FollowUp (new chat)",
                 "rating": 0,
-                "explanation": "Необходимы дополнительные данные pre pokračovanie.",
+                "explanation": "Additional data pre pokračovanie is required.",
                 "patient_data": query
             }
 
-    # 3. Классификация запроса
+
     qtype = classify_query(query, chat_history)
     logger.info(f"Typ dopytu: {qtype}")
     logger.info(f"Chat context (snippet): {chat_history[:200]}...")
 
-    # Если запрос типа "vyhladavanie", получаем данные пользователя из БД и добавляем к запросу
+
     if qtype == "vyhladavanie":
         user_data_db = get_user_data_from_db(chat_id)
         if user_data_db:
             query = query + " Udaje cloveka: " + user_data_db
         agent.long_term_memory["search_query"] = query
 
-    # Если запрос типа "upresnenie", комбинируем последний vyhladavací dopyт с новым уточнением и данными из БД
+
     if qtype == "upresnenie":
-        original_search = agent.long_term_memory.get("search_query", "")
+        original_search = agent.long_term_memory.get("search_query")
         if not original_search:
             original_search = extract_last_vyhladavacie_query(chat_history)
-        combined_query = (original_search + " " + query).strip() if original_search else query
+        if original_search is None:
+            original_search = ""
+        combined_query = (original_search + " " + query).strip()
         user_data_db = get_user_data_from_db(chat_id)
         if user_data_db:
             combined_query += " Udaje cloveka: " + user_data_db
@@ -416,7 +419,7 @@ def process_query_with_mistral(query: str, chat_id: str, chat_context: str, k=10
         logger.info(f"Upresnenie prompt response: {normalized}")
 
         if re.match(r"(?i)^found_in_history:\s*", normalized):
-            logger.info("Zistený FOUND_IN_HISTORY – vykonávame vyhľadávanie s kombinovaným dopyтом.")
+            logger.info("Zistený FOUND_IN_HISTORY – vykonávame vyhľadávanie s kombinovaným dopytom.")
         elif re.match(r"(?i)^no_answer_in_history:\s*", normalized):
             parts = re.split(r"(?i)^no_answer_in_history:\s*", normalized, maxsplit=1)
             if len(parts) >= 2:
@@ -464,7 +467,7 @@ def process_query_with_mistral(query: str, chat_id: str, chat_context: str, k=10
             "explanation": best["eval"]["explanation"]
         }
 
-    # 5. Обычный запрос vyhladavanie (для остальных случаев)
+
     vector_results = vectorstore.similarity_search(query, k=k)
     max_docs = 5
     max_len = 1000

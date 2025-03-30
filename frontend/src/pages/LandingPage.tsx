@@ -2,18 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { CgLogIn } from "react-icons/cg";
 import BackImage from '../assets/smallheadicon.png';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
-import { Box, Button, Avatar, Modal, Typography } from '@mui/material';
+import { Box, Button, Avatar } from '@mui/material';
 import gsap from 'gsap';
 import { useGSAP } from '@gsap/react';
 import LogoutIcon from '@mui/icons-material/Logout';
 import LoginIcon from '@mui/icons-material/Login';
-import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
 import { Link, useNavigate } from 'react-router-dom';
-import RegistrationForm from "../Components/RegistrationForm";
 
-const CLIENT_ID = "532143017111-4eqtlp0oejqaovj6rf5l1ergvhrp4vao.apps.googleusercontent.com";
-
-// Компонент для анимации стрелки вниз
 const BouncingArrow = () => {
     return (
         <Box
@@ -77,7 +72,7 @@ const Navbar: React.FC<NavbarProps> = ({ user, setUser }) => {
             <div className="flex items-center">
                 {user ? (
                     <div className="flex items-center gap-2">
-                        <Avatar alt={user.name} src={user.picture} onClick={()=>navigate('/profile')} />
+                        <Avatar alt={user.name} src={user.picture} onClick={() => navigate('/profile')} />
                         <LogoutIcon
                             onClick={handleSignOut}
                             sx={{ cursor: 'pointer', color: '#0d47a1', fontSize: '30px' }}
@@ -98,7 +93,6 @@ const Home: React.FC = () => {
     const navigate = useNavigate();
     const [user, setUser] = useState<any>(null);
 
-    // При загрузке страницы пытаемся загрузить данные пользователя из localStorage
     useEffect(() => {
         const storedUser = localStorage.getItem('user');
         if (storedUser) {
@@ -106,7 +100,6 @@ const Home: React.FC = () => {
         }
     }, []);
 
-    // Анимация GSAP для элементов страницы
     useGSAP(() => {
         gsap.from('#mainheading', { opacity: 0.3, ease: 'power2.inOut', duration: 0.5 });
         gsap.from('#secondheading', { opacity: 0, y: 5, ease: 'power2.inOut', delay: 0.3, duration: 0.5 });
@@ -116,23 +109,20 @@ const Home: React.FC = () => {
         gsap.to('#button', { opacity: 1, ease: 'power2.inOut', delay: 2.5, duration: 0.5 });
     }, []);
 
-    // Обработчик нажатия на кнопку "Get started"
     const handleGetStartedClick = () => {
         if (!user) {
-            // Если пользователь не авторизован — переходим на страницу регистрации
             navigate('/register');
         } else {
-            // Если авторизован — переходим на страницу dashboard
             navigate('/dashboard');
         }
     };
 
     return (
-        <div style={{ backgroundColor: '#d0e7ff' }} className="min-h-screen">
-            <div className="h-screen flex flex-col items-center justify-center bg-gradient-to-b text-gray-800 p-4">
+        <div style={{ backgroundColor: '#d0e7ff' }} className="min-h-screen flex flex-col">
+            <div className="flex-grow flex flex-col items-center justify-center bg-gradient-to-b text-gray-800 p-4 pt-20">
                 <Navbar user={user} setUser={setUser} />
 
-                <div className="pt-20 flex flex-col items-center">
+                <div className="flex flex-col items-center">
                     <h1
                         id="mainheading"
                         className="text-4xl flex items-center sm:text-5xl md:text-6xl font-semibold mb-4 text-center text-dark-blue"
@@ -186,7 +176,7 @@ const Home: React.FC = () => {
                 </div>
             </div>
 
-            <footer className="mt-auto text-center text-gray-500 p-4">
+            <footer className="text-center text-gray-500 p-4">
                 <p>&copy; {new Date().getFullYear()} Health AI. All rights reserved.</p>
             </footer>
         </div>
@@ -194,4 +184,3 @@ const Home: React.FC = () => {
 };
 
 export { Home, Navbar };
-

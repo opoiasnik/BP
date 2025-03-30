@@ -7,15 +7,12 @@ from google.auth.transport import requests as google_requests
 import logging
 import psycopg2
 from psycopg2.extras import RealDictCursor
-
-# Importujeme funkciu process_query_with_mistral z model.py
 from model import process_query_with_mistral
 
-# Pôvodné nastavenie času
 _real_time = time.time
 time.time = lambda: _real_time() - 1
 
-# Parametre pripojenia k DB
+# Database connection parameters
 DATABASE_CONFIG = {
     "dbname": "HealthAIDB",
     "user": "postgres",
@@ -30,9 +27,9 @@ logger = logging.getLogger(__name__)
 
 try:
     conn = psycopg2.connect(**DATABASE_CONFIG)
-    logger.info("Подключение к базе данных успешно установлено")
+    logger.info("Database connection established successfully")
 except Exception as e:
-    logger.error(f"Ошибка подключения к базе данных: {e}", exc_info=True)
+    logger.error(f"Error connecting to database: {e}", exc_info=True)
     conn = None
 
 app = Flask(__name__)
@@ -41,7 +38,7 @@ CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173"}})
 CLIENT_ID = "532143017111-4eqtlp0oejqaovj6rf5l1ergvhrp4vao.apps.googleusercontent.com"
 
 def save_user_to_db(name, email, google_id=None, password=None):
-    logger.info(f"Сохранение пользователя {name} с email: {email} в БД")
+    logger.info(f"Saving user {name} with email: {email} to the database")
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
@@ -53,91 +50,91 @@ def save_user_to_db(name, email, google_id=None, password=None):
                 (name, email, google_id, password)
             )
             conn.commit()
-        logger.info(f"Пользователь {name} ({email}) успешно сохранен")
+        logger.info(f"User {name} ({email}) saved successfully")
     except Exception as e:
-        logger.error(f"Ошибка сохранения пользователя {name} ({email}) в БД: {e}", exc_info=True)
+        logger.error(f"Error saving user {name} ({email}) to database: {e}", exc_info=True)
 
 @app.route('/api/verify', methods=['POST'])
 def verify_token():
-    logger.info("Получен запрос на верификацию токена")
+    logger.info("Received token verification request")
     data = request.get_json()
     token = data.get('token')
     if not token:
-        logger.warning("Токен не предоставлен в запросе")
+        logger.warning("Token not provided in request")
         return jsonify({'error': 'No token provided'}), 400
     try:
         id_info = id_token.verify_oauth2_token(token, google_requests.Request(), CLIENT_ID)
         user_email = id_info.get('email')
         user_name = id_info.get('name')
         google_id = id_info.get('sub')
-        logger.info(f"Токен верифицирован для пользователя: {user_name} ({user_email})")
+        logger.info(f"Token verified for user: {user_name} ({user_email})")
         save_user_to_db(name=user_name, email=user_email, google_id=google_id)
         return jsonify({'message': 'Authentication successful', 'user': {'email': user_email, 'name': user_name}}), 200
     except ValueError as e:
-        logger.error(f"Ошибка верификации токена: {e}", exc_info=True)
+        logger.error(f"Token verification error: {e}", exc_info=True)
         return jsonify({'error': 'Invalid token'}), 400
 
 @app.route('/api/register', methods=['POST'])
 def register():
-    logger.info("Получен запрос на регистрацию нового пользователя")
+    logger.info("Received new user registration request")
     data = request.get_json()
     name = data.get('name')
     email = data.get('email')
     password = data.get('password')
     if not all([name, email, password]):
-        logger.warning("Не все поля предоставлены для регистрации")
+        logger.warning("Not all required fields provided for registration")
         return jsonify({'error': 'All fields are required'}), 400
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("SELECT * FROM users WHERE email = %s", (email,))
             existing_user = cur.fetchone()
             if existing_user:
-                logger.warning(f"Пользователь с email {email} уже существует")
+                logger.warning(f"User with email {email} already exists")
                 return jsonify({'error': 'User already exists'}), 409
         save_user_to_db(name=name, email=email, password=password)
-        logger.info(f"Пользователь {name} ({email}) успешно зарегистрирован")
+        logger.info(f"User {name} ({email}) registered successfully")
         return jsonify({'message': 'User registered successfully'}), 201
     except Exception as e:
-        logger.error(f"Ошибка при регистрации пользователя: {e}", exc_info=True)
+        logger.error(f"Error during user registration: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/login', methods=['POST'])
 def login():
-    logger.info("Получен запрос на логин")
+    logger.info("Received login request")
     data = request.get_json()
     email = data.get('email')
     password = data.get('password')
     if not all([email, password]):
-        logger.warning("Email или пароль не предоставлены")
+        logger.warning("Email or password not provided")
         return jsonify({'error': 'Email and password are required'}), 400
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("SELECT * FROM users WHERE email = %s", (email,))
             user = cur.fetchone()
             if not user or user.get('password') != password:
-                logger.warning(f"Неверные учетные данные для email: {email}")
+                logger.warning(f"Invalid credentials for email: {email}")
                 return jsonify({'error': 'Invalid credentials'}), 401
-        logger.info(f"Пользователь {user.get('name')} ({email}) успешно вошел в систему")
+        logger.info(f"User {user.get('name')} ({email}) logged in successfully")
         return jsonify({'message': 'Login successful', 'user': {'name': user.get('name'), 'email': user.get('email')}}), 200
     except Exception as e:
-        logger.error(f"Ошибка при логине пользователя: {e}", exc_info=True)
+        logger.error(f"Error during user login: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/chat', methods=['POST'])
 def chat():
-    logger.info("Получен запрос на чат")
+    logger.info("Received chat request")
     data = request.get_json()
     query = data.get('query', '')
     user_email = data.get('email')
-    chat_id = data.get('chatId')  # Если задан, идёт существующий чат
+    chat_id = data.get('chatId')
 
     if not query:
-        logger.warning("Запрос не предоставлен")
+        logger.warning("No query provided")
         return jsonify({'error': 'No query provided'}), 400
 
-    logger.info(f"Обработка запроса для chatId: {chat_id if chat_id else 'новый чат'} | Запрос: {query}")
+    logger.info(f"Processing request for chatId: {chat_id if chat_id else 'new chat'} | Query: {query}")
 
-    # Получение контекста чата из БД
+    # Retrieve chat context from the database
     chat_context = ""
     if chat_id:
         try:
@@ -146,22 +143,22 @@ def chat():
                 result = cur.fetchone()
                 if result:
                     chat_context = result.get("chat", "")
-                    logger.info(f"Загружен контекст чата из БД для chatId {chat_id}: {chat_context}")
+                    logger.info(f"Loaded chat context for chatId {chat_id}: {chat_context}")
                 else:
-                    logger.info(f"Для chatId {chat_id} контекст не найден")
+                    logger.info(f"No chat context found for chatId {chat_id}")
         except Exception as e:
-            logger.error(f"Ошибка при загрузке контекста чата из БД: {e}", exc_info=True)
+            logger.error(f"Error loading chat context from DB: {e}", exc_info=True)
 
-    logger.info("Вызов функции process_query_with_mistral")
+    logger.info("Calling process_query_with_mistral function")
     response_obj = process_query_with_mistral(query, chat_id=chat_id, chat_context=chat_context)
     best_answer = response_obj.get("best_answer", "") if isinstance(response_obj, dict) else str(response_obj)
-    logger.info(f"Ответ от process_query_with_mistral: {best_answer}")
+    logger.info(f"Response from process_query_with_mistral: {best_answer}")
 
     best_answer = re.sub(r'[*#]', '', best_answer)
     best_answer = re.sub(r'(\d\.\s)', r'\n\n\1', best_answer)
     best_answer = re.sub(r':\s-', r':\n-', best_answer)
 
-    # Обновление или создание записи в chat_history, включая поле user_data, если есть
+    # Update or create chat_history record including user_data if available
     if chat_id:
         try:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -175,7 +172,7 @@ def chat():
                     else:
                         cur.execute("UPDATE chat_history SET chat = %s WHERE id = %s", (updated_chat, chat_id))
                     conn.commit()
-                    logger.info(f"История чата для chatId {chat_id} успешно обновлена")
+                    logger.info(f"Chat history for chatId {chat_id} updated successfully")
                 else:
                     with conn.cursor(cursor_factory=RealDictCursor) as cur2:
                         cur2.execute(
@@ -185,9 +182,9 @@ def chat():
                         new_chat_id = cur2.fetchone()['id']
                         conn.commit()
                         chat_id = new_chat_id
-                        logger.info(f"Создан новый чат с chatId: {chat_id}")
+                        logger.info(f"New chat created with chatId: {chat_id}")
         except Exception as e:
-            logger.error(f"Ошибка при обновлении/создании истории чата: {e}", exc_info=True)
+            logger.error(f"Error updating/creating chat history: {e}", exc_info=True)
             return jsonify({'error': str(e)}), 500
     else:
         try:
@@ -199,16 +196,16 @@ def chat():
                 new_chat_id = cur.fetchone()['id']
                 conn.commit()
                 chat_id = new_chat_id
-                logger.info(f"Новый чат успешно создан с chatId: {chat_id}")
+                logger.info(f"New chat created with chatId: {chat_id}")
         except Exception as e:
-            logger.error(f"Ошибка при создании нового чата: {e}", exc_info=True)
+            logger.error(f"Error creating new chat: {e}", exc_info=True)
             return jsonify({'error': str(e)}), 500
 
     return jsonify({'response': {'best_answer': best_answer, 'model': response_obj.get("model", ""), 'chatId': chat_id}}), 200
 
 @app.route('/api/save_user_data', methods=['POST'])
 def save_user_data():
-    logger.info("Получен запрос на сохранение данных пользователя")
+    logger.info("Received request to save user data")
     data = request.get_json()
     chat_id = data.get('chatId')
     user_data = data.get('userData')
@@ -218,16 +215,15 @@ def save_user_data():
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("UPDATE chat_history SET user_data = %s WHERE id = %s", (user_data, chat_id))
             conn.commit()
-        logger.info(f"Данные пользователя для chatId {chat_id} успешно обновлены")
+        logger.info(f"User data for chatId {chat_id} updated successfully")
         return jsonify({'message': 'User data updated successfully'}), 200
     except Exception as e:
-        logger.error(f"Ошибка при обновлении данных пользователя: {e}", exc_info=True)
+        logger.error(f"Error updating user data: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
-
 
 @app.route('/api/chat_history', methods=['GET'])
 def get_chat_history():
-    logger.info("Получен запрос на получение истории чата")
+    logger.info("Received request to get chat history")
     user_email = request.args.get('email')
     if not user_email:
         return jsonify({'error': 'User email is required'}), 400
@@ -240,12 +236,12 @@ def get_chat_history():
             history = cur.fetchall()
         return jsonify({'history': history}), 200
     except Exception as e:
-        logger.error(f"Ошибка при получении истории чата для {user_email}: {e}", exc_info=True)
+        logger.error(f"Error getting chat history for {user_email}: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/chat_history', methods=['DELETE'])
 def delete_chat():
-    logger.info("Получен запрос на удаление чата")
+    logger.info("Received request to delete chat")
     chat_id = request.args.get('id')
     if not chat_id:
         return jsonify({'error': 'Chat id is required'}), 400
@@ -255,8 +251,9 @@ def delete_chat():
             conn.commit()
         return jsonify({'message': 'Chat deleted successfully'}), 200
     except Exception as e:
-        logger.error(f"Ошибка при удалении чата с chatId {chat_id}: {e}", exc_info=True)
+        logger.error(f"Error deleting chat with chatId {chat_id}: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
+
 @app.route('/api/get_user_data', methods=['GET'])
 def get_user_data():
     chat_id = request.args.get('chatId')
@@ -271,12 +268,12 @@ def get_user_data():
         else:
             return jsonify({'user_data': None}), 200
     except Exception as e:
-        logger.error(f"Error retrieving user_data: {e}", exc_info=True)
+        logger.error(f"Error retrieving user data: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/chat_history_detail', methods=['GET'])
 def chat_history_detail():
-    logger.info("Получен запрос на получение деталей чата")
+    logger.info("Received request to get chat details")
     chat_id = request.args.get('id')
     if not chat_id:
         return jsonify({'error': 'Chat id is required'}), 400
@@ -288,9 +285,9 @@ def chat_history_detail():
             return jsonify({'error': 'Chat not found'}), 404
         return jsonify({'chat': chat}), 200
     except Exception as e:
-        logger.error(f"Ошибка при получении деталей чата для chatId {chat_id}: {e}", exc_info=True)
+        logger.error(f"Error getting chat details for chatId {chat_id}: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    logger.info("Запуск Flask приложения")
+    logger.info("Starting Flask application")
     app.run(host='0.0.0.0', port=5000, debug=True)

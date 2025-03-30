@@ -32,9 +32,7 @@ function App() {
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/about" element={<About />} />
                 <Route path="/dashboard" element={<Layout />}>
-                    {/* Новый чат */}
                     <Route path="new-chat" element={<NewChatPage />} />
-                    {/* Существующий чат (после создания нового, URL обновится) */}
                     <Route path="chat/:id" element={<HomePage />} />
                     <Route path="history" element={<ChatHistory />} />
                     <Route index element={<HomePage />} />

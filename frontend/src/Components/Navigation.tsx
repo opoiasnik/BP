@@ -17,7 +17,7 @@ export interface NavigationItem {
 const NavigationItems: NavigationItem[] = [
     {
         title: 'New Chat',
-        link: '/dashboard/new-chat', // Перенаправляем сразу на новый чат
+        link: '/dashboard/new-chat',
         icon: <MdAddCircleOutline size={30} />
     },
     {
@@ -54,7 +54,6 @@ const Navigation = ({ isExpanded = false }: NavigationProps) => {
         setTheme(theme === "dark" ? "light" : "dark");
     };
 
-    // Загружаем данные пользователя из localStorage (если имеются)
     const [user, setUser] = useState<any>(null);
     useEffect(() => {
         const storedUser = localStorage.getItem('user');
@@ -106,7 +105,6 @@ const Navigation = ({ isExpanded = false }: NavigationProps) => {
                         ))}
                     </div>
                 </div>
-                {/* Блок с иконкой пользователя и переключателем темы */}
                 <div className="flex flex-col items-center gap-2">
                     <Link to={user ? '/profile' : '/login'} className="flex items-center">
                         <IconButton

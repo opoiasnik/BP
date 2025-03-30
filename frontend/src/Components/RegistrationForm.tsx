@@ -11,7 +11,6 @@ const RegistrationFormContent: React.FC = () => {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        // Приведение типов для получения значений инпутов
         const nameElement = document.getElementById('name') as HTMLInputElement | null;
         const emailElement = document.getElementById('email') as HTMLInputElement | null;
         const passwordElement = document.getElementById('password') as HTMLInputElement | null;
@@ -27,7 +26,6 @@ const RegistrationFormContent: React.FC = () => {
         const password = passwordElement.value;
         const confirmPassword = confirmPasswordElement.value;
 
-        // Проверка совпадения паролей
         if (password !== confirmPassword) {
             console.error('Passwords do not match');
             alert('Passwords do not match');
@@ -45,7 +43,6 @@ const RegistrationFormContent: React.FC = () => {
 
             if (response.ok) {
                 console.log('User registered successfully:', data.message);
-                // Создаем объект пользователя для авторизации (placeholder для аватара)
                 const loggedInUser = {
                     name,
                     email,
@@ -55,7 +52,7 @@ const RegistrationFormContent: React.FC = () => {
                 navigate('/dashboard');
             } else {
                 console.error('Error:', data.error);
-                alert(data.error);  // Показываем сообщение об ошибке, например "User already exists"
+                alert(data.error);
             }
         } catch (error) {
             console.error('Error registering user:', error);
@@ -79,12 +76,12 @@ const RegistrationFormContent: React.FC = () => {
             localStorage.setItem('user', JSON.stringify(loggedInUser));
             navigate('/dashboard');
         } catch (error) {
-            console.error('Ошибка верификации токена:', error);
+            console.error('Error tiken verification:', error);
         }
     };
 
     const handleGoogleLoginError = (error: any) => {
-        console.error('Ошибка аутентификации:', error);
+        console.error('Error auth:', error);
     };
 
     return (

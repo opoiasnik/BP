@@ -48,7 +48,6 @@ const ChatHistory: React.FC = () => {
                     if (data.error) {
                         setError(data.error);
                     } else {
-                        // Обновляем состояние, удаляя удалённый чат
                         setHistory(history.filter((chat) => chat.id !== chatId));
                     }
                 })

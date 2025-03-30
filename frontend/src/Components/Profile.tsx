@@ -53,7 +53,6 @@ const Profile: React.FC = () => {
     };
 
     const handleCancelEdit = () => {
-        // Reset formData to original user values
         setFormData({
             name: user.name || '',
             email: user.email || '',

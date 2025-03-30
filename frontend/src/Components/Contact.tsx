@@ -10,7 +10,6 @@ const Contact: React.FC = () => {
     const navigate = useNavigate();
     const [user, setUser] = useState<any>(null);
 
-    // Load user information from localStorage to pass to Navbar
     useEffect(() => {
         const storedUser = localStorage.getItem('user');
         if (storedUser) {

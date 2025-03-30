@@ -30,10 +30,10 @@ def index_documents(data):
             'full_data': item
         })
 
-        sys.stdout.write(f"\rПроиндексировано {i} из {total_documents} документов")
+
         sys.stdout.flush()
 
-    print("\nИндексирование завершено.")
+
 
 
 data_path = "../../data_adc_databaza/cleaned_general_info_additional.json"

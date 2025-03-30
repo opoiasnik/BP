@@ -10,12 +10,11 @@ const LoginFormContent: React.FC = () => {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        // Приведение типов для получения значений инпутов
         const emailElement = document.getElementById('email') as HTMLInputElement | null;
         const passwordElement = document.getElementById('password') as HTMLInputElement | null;
 
         if (!emailElement || !passwordElement) {
-            console.error('Один или несколько инпутов отсутствуют');
+            console.error('One or many inputs are missing');
             return;
         }
 
@@ -41,10 +40,10 @@ const LoginFormContent: React.FC = () => {
                 localStorage.setItem('user', JSON.stringify(loggedInUser));
                 navigate('/dashboard');
             } else {
-                console.error('Ошибка:', data.error);
+                console.error('Error:', data.error);
             }
         } catch (error) {
-            console.error('Ошибка при входе:', error);
+            console.error('Error loginning:', error);
         }
     };
 
@@ -64,12 +63,12 @@ const LoginFormContent: React.FC = () => {
             localStorage.setItem('user', JSON.stringify(loggedInUser));
             navigate('/dashboard');
         } catch (error) {
-            console.error('Ошибка верификации токена:', error);
+            console.error('Error token verification:', error);
         }
     };
 
     const handleGoogleLoginError = (error: any) => {
-        console.error('Ошибка аутентификации через Google:', error);
+        console.error('Error auth through Google:', error);
     };
 
     return (
