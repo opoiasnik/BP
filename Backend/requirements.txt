@@ -189,3 +189,8 @@ wrapt==1.16.0
 xformers==0.0.28.post1
 yarl==1.9.4
 zipp==3.20.2
+flask
+flask-cors
+psycopg2-binary
+google-auth
+

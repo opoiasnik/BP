@@ -2,9 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import IconButton from '@mui/material/IconButton';
 import Avatar from '@mui/material/Avatar';
-import { MdAddCircleOutline, MdOutlineDarkMode } from "react-icons/md";
+import { MdAddCircleOutline } from "react-icons/md";
 import { GoHistory } from "react-icons/go";
-import { CiLight } from "react-icons/ci";
 import { CgLogIn } from "react-icons/cg";
 import BackImage from '../assets/smallheadicon.png';
 
@@ -50,9 +49,7 @@ const Navigation = ({ isExpanded = false }: NavigationProps) => {
         }
     }, [theme]);
 
-    const handleThemeSwitch = () => {
-        setTheme(theme === "dark" ? "light" : "dark");
-    };
+
 
     const [user, setUser] = useState<any>(null);
     useEffect(() => {

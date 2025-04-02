@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Typography, Paper, Grid } from '@mui/material';
 import {Navbar} from '../pages/LandingPage';
-import { useNavigate } from 'react-router-dom';
 import SchoolIcon from '@mui/icons-material/School';
 import DeveloperModeIcon from '@mui/icons-material/DeveloperMode';
 import EmailIcon from '@mui/icons-material/Email';
 
 const Contact: React.FC = () => {
-    const navigate = useNavigate();
     const [user, setUser] = useState<any>(null);
 
     useEffect(() => {

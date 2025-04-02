@@ -1,11 +1,11 @@
 #!/bin/sh
 
-echo "Ожидание готовности Elasticsearch..."
+echo "Waiting for Elasticsearch..."
 
 while ! curl -s http://elasticsearch:9200 > /dev/null; do
   sleep 5
 done
 
-echo "Elasticsearch готов. Запуск бэкенда..."
+echo "Elasticsearch is ready. Starting backend..."
 
 exec "$@"

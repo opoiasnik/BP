@@ -67,9 +67,10 @@ const LoginFormContent: React.FC = () => {
         }
     };
 
-    const handleGoogleLoginError = (error: any) => {
-        console.error('Error auth through Google:', error);
+    const handleGoogleLoginError = () => {
+        console.error('Error auth through Google');
     };
+
 
     return (
         <div

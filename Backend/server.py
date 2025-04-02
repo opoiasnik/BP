@@ -17,7 +17,7 @@ DATABASE_CONFIG = {
     "dbname": "HealthAIDB",
     "user": "postgres",
     "password": "Oleg2005",
-    "host": "localhost",
+    "host": "postgres",
     "port": 5432,
 }
 
@@ -32,8 +32,40 @@ except Exception as e:
     logger.error(f"Error connecting to database: {e}", exc_info=True)
     conn = None
 
+def init_db():
+    create_users_query = """
+    CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        email TEXT UNIQUE NOT NULL,
+        google_id TEXT,
+        password TEXT
+    );
+    """
+    create_chat_history_query = """
+    CREATE TABLE IF NOT EXISTS chat_history (
+        id SERIAL PRIMARY KEY,
+        user_email TEXT NOT NULL,
+        chat TEXT NOT NULL,
+        user_data TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """
+    try:
+        with conn.cursor() as cur:
+            cur.execute(create_users_query)
+            cur.execute(create_chat_history_query)
+            conn.commit()
+        logger.info("Database tables initialized successfully")
+    except Exception as e:
+        logger.error(f"Error initializing database tables: {e}", exc_info=True)
+        conn.rollback()
+
+if conn:
+    init_db()
+
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173"}})
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 CLIENT_ID = "532143017111-4eqtlp0oejqaovj6rf5l1ergvhrp4vao.apps.googleusercontent.com"
 

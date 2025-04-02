@@ -21,6 +21,20 @@ services:
       retries: 5
       start_period: 40s
 
+  postgres:
+    image: postgres:14
+    container_name: postgres_db
+    environment:
+      - POSTGRES_DB=HealthAIDB
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=Oleg2005
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - app-network
+
   backend:
     container_name: backend_container
     build:
@@ -30,9 +44,12 @@ services:
       - "5000:5000"
     environment:
       - ELASTICSEARCH_HOST=http://elasticsearch:9200
+      - DATABASE_HOST=postgres
     depends_on:
       elasticsearch:
         condition: service_healthy
+      postgres:
+        condition: service_started
     networks:
       - app-network
 
@@ -42,7 +59,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "5173:5173"
     depends_on:
       - backend
     networks:
@@ -51,3 +68,6 @@ services:
 networks:
   app-network:
     driver: bridge
+
+volumes:
+  pgdata:

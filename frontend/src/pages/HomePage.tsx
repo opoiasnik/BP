@@ -30,7 +30,7 @@ const HomePage: React.FC = () => {
         if (!isNewChat && selectedChat && selectedChat.chat) {
             const messages: ChatMessage[] = selectedChat.chat
                 .split(/(?=^(User:|Bot:))/m)
-                .map((msg) => {
+                .map((msg:any) => {
                     const trimmed = msg.trim();
                     const sender = trimmed.startsWith('User:') ? 'User' : 'Assistant';
                     return {

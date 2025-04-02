@@ -1,7 +1,6 @@
 import React from 'react';
 import { GoogleLogin, GoogleOAuthProvider } from '@react-oauth/google';
 import { Link, useNavigate } from 'react-router-dom';
-import gsap from 'gsap';
 
 const CLIENT_ID = "532143017111-4eqtlp0oejqaovj6rf5l1ergvhrp4vao.apps.googleusercontent.com";
 
@@ -80,9 +79,10 @@ const RegistrationFormContent: React.FC = () => {
         }
     };
 
-    const handleGoogleLoginError = (error: any) => {
-        console.error('Error auth:', error);
+    const handleGoogleLoginError = () => {
+        console.error('Error auth: Google login failed');
     };
+
 
     return (
         <div

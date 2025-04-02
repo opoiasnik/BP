@@ -167,7 +167,7 @@ if config.get("useCloud", False):
 else:
     logger.info("Using local Elasticsearch.")
     vectorstore = ElasticsearchStore(
-        es_url="http://localhost:9200",
+        es_url="http://elasticsearch:9200",
         index_name=index_name,
         embedding=embeddings,
     )

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { CgLogIn } from "react-icons/cg";
+
 import BackImage from '../assets/smallheadicon.png';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
-import { Box, Button, Avatar } from '@mui/material';
+import { Box, Avatar } from '@mui/material';
 import gsap from 'gsap';
 import { useGSAP } from '@gsap/react';
 import LogoutIcon from '@mui/icons-material/Logout';
