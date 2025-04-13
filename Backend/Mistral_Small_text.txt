@@ -69,3 +69,27 @@ Ak máte bolest hlavy a nemáte chronické ochorenia alebo alergie, môžete sk�
 Pokiaľ sa bolest hlavy opakuje alebo je veľmi silná, je vhodné poradiť sa s lekárom.
 ================================================================================
 
+Timestamp: 2025-04-13 20:33:03
+Rating: 8.0/10
+Detailed description:
+Odpoveď na otázku "Mám horúčku, aké lieky mám užívať?" dosiahla hodnotenie 8.0 zo 10, čo je veľmi dobrý výsledok. Tieto sú relevantné aspekty, ktoré ovplyvnili toto hodnotenie:
+
+### Úplnosť
+1. **Relevantné informácie**: Odpoveď poskytuje úplné informácie o tom, prečo nie je vhodné užívať rivaroxabán Sandoz pri horúčke a čo by sa malo urobiť pri horúčke.
+2. **Dodatočné kroky**: Odpoveď obsahuje kon
+Answer:
+Ak máte horúčku, nie je vhodné užívať rivaroxabán Sandoz, pretože tento liek sa používa na prevenciu krvných zrážok a liečbu trombózy. Horúčka je príznak, ktorý môže byť spôsobený rôznymi príčinami, ako sú infekcie, zánety alebo ďalšie zdravotné problémy.
+
+Pre správnu liečbu horúčky dodržujte tieto kroky:
+
+1. **Kontaktujte svojho lekára**: Pre správnu diagnózu a liečbu. Lekár vám môže predpísať vhodný liek, napríklad paracetamol alebo ibuprofen, v závislosti od príčiny horúčky.
+
+2. **Zvyšte príjom tekutín**: Pomôže to udržať hydratáciu.
+
+3. **Odpočívajte**: Telo potrebuje energiu na boj proti infekcii.
+
+4. **Užívajte lieky na horúčku iba na predpis**: Paracetamol alebo ibuprofen môžu byť vhodné, ale len pod dohľadom lekára. Obvyklé dávkovanie paracetamolu je 500-1000 mg každých 4-6 hodín, maximálne 4krát za 24 hodín. Ibuprófen sa obvykle užíva v dávke 200-400 mg každých 4-6 hodín, maximálne 3krát za 24 hodín. Dávkovanie by však malo byť vždy dohodnuté s lekárom.
+
+Rivaroxabán Sandoz by ste mali užívať iba podľa predpisu a v prípade vedľajších účinkov alebo otázok sa obráťte na svojho lekára alebo lekárnika.
+================================================================================
+

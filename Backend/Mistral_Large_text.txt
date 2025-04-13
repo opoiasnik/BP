@@ -68,3 +68,19 @@ Na základe vašich informácií, ak ste 20 ročný bez chronických ochorení a
 Ak bolesť hlavy pretrváva alebo je veľmi silná, odporúčame navštíviť lekára pre lepšie vyhodnotenie príčiny.
 ================================================================================
 
+Timestamp: 2025-04-13 20:33:05
+Rating: 9.0/10
+Detailed description:
+Odpoveď na otázku "Mám horúčku, aké lieky mám užívať?" dosiahla hodnotenie 9.0 zo 10, čo je veľmi dobrý výsledok. Toto hodnotenie je ovplyvnené viacerými relevantnými aspektmi:
+
+1. **Úplnosť**:
+   - Odpoveď poskytuje úplné informácie o dvoch bežných liekoch na liečbu horúčky: paracetamol a ibuprofen.
+   - Uvádza konkrétne dávky a frekvenciu podania, čo je dôležité pre bezpečné a účinné už
+Answer:
+Ak máte horúčku, môžete použiť paracetamol (napr. Panadol) alebo ibuprofen (napr. Nurofen). Paracetamol sa obvykle užíva v dávke 500-1000 mg každých 4-6 hodín, maximálne 4krát za 24 hodín. Ibuprofen sa užíva v dávke 200-400 mg každých 4-6 hodín, maximálne 3krát za 24 hodín. Tieto lieky môžete kúpiť v lekárni bez predpisu.
+
+Pri užívaní týchto liekov dodržujte návod na balení a neprekračujte doporučené dávky. Ak horúčka neustúpi alebo sa zhoršia iné príznaky, kontaktujte svojho lekára.
+
+Rivaroxabán Sandoz je antikoagulačný liek, ktorý sa používa na prevenciu a liečbu trombózy. Nie je vhodný na liečbu horúčky a nemal by sa používať na túto indikáciu.
+================================================================================
+
