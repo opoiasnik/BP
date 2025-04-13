@@ -17,7 +17,7 @@ DATABASE_CONFIG = {
     "dbname": "HealthAIDB",
     "user": "postgres",
     "password": "Oleg2005",
-    "host": "postgres",
+    "host": "localhost",
     "port": 5432,
 }
 
@@ -35,11 +35,15 @@ except Exception as e:
 def init_db():
     create_users_query = """
     CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        name TEXT NOT NULL,
-        email TEXT UNIQUE NOT NULL,
-        google_id TEXT,
-        password TEXT
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT UNIQUE NOT NULL,
+    google_id TEXT,
+    password TEXT,
+    phone TEXT,
+    role TEXT,
+    bio TEXT,
+    picture TEXT
     );
     """
     create_chat_history_query = """
@@ -106,6 +110,16 @@ def verify_token():
         logger.error(f"Token verification error: {e}", exc_info=True)
         return jsonify({'error': 'Invalid token'}), 400
 
+
+@app.errorhandler(404)
+def not_found(e):
+    return jsonify({'error': 'Not found'}), 404
+
+@app.errorhandler(500)
+def internal_error(e):
+    return jsonify({'error': 'Internal server error'}), 500
+
+
 @app.route('/api/register', methods=['POST'])
 def register():
     logger.info("Received new user registration request")
@@ -150,6 +164,42 @@ def login():
         return jsonify({'message': 'Login successful', 'user': {'name': user.get('name'), 'email': user.get('email')}}), 200
     except Exception as e:
         logger.error(f"Error during user login: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/update_profile', methods=['PUT'])
+def update_profile():
+    data = request.get_json()
+    email = data.get('email')
+    if not email:
+        return jsonify({'error': 'Email is required'}), 400
+
+    # Fields to update; if not provided, the current value remains.
+    name = data.get('name')
+    phone = data.get('phone')
+    role = data.get('role')
+    bio = data.get('bio')
+    picture = data.get('picture')
+
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                UPDATE users
+                SET name = COALESCE(%s, name),
+                    phone = COALESCE(%s, phone),
+                    role = COALESCE(%s, role),
+                    bio = COALESCE(%s, bio),
+                    picture = COALESCE(%s, picture)
+                WHERE email = %s
+                """,
+                (name, phone, role, bio, picture, email)
+            )
+            conn.commit()
+        logger.info(f"Profile updated for {email}")
+        return jsonify({'message': 'Profile updated successfully'}), 200
+    except Exception as e:
+        logger.error(f"Error updating profile: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/chat', methods=['POST'])

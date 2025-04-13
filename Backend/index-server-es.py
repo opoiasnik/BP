@@ -5,7 +5,7 @@ import json
 
 # Настройка подключения к Elasticsearch с аутентификацией и HTTPS
 es = Elasticsearch(
-    [{'host': 'localhost', 'port': 9200, 'scheme': 'https'}],
+    [{'host': 'localhost', 'port': 9200, 'scheme': 'http'}],
     http_auth=('elastic', 'S7DoO3ma=G=9USBPbqq3'),  # замените на ваш пароль
     verify_certs=False  # Отключить проверку SSL-сертификата, если используется самоподписанный сертификат
 )
@@ -74,7 +74,7 @@ def index_documents(data):
 
 if __name__ == "__main__":
     create_index()
-    data_path = "/home/poiasnik/esDB/cleaned_general_info_additional.json"
+    data_path = "../../esDB/cleaned_general_info_additional.json"
     drug_data = load_drug_data(data_path)
     index_documents(drug_data)
 

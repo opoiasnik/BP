@@ -1,4 +1,5 @@
 #!/bin/bash
-echo "Подготовка окружения: сборка Docker образов..."
-docker-compose build
-echo "Подготовка завершена."
+echo "Prepearing Docker images..."
+docker-compose up --build
+
+echo "Preparation ended."

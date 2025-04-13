@@ -127,7 +127,7 @@ const HomePage: React.FC = () => {
             console.error('Error:', error);
             setChatHistory((prev) => [
                 ...prev,
-                { sender: 'Assistant', text: 'Что-то пошло не так' },
+                { sender: 'Assistant', text: 'Something went wrong' },
             ]);
         }
     };
