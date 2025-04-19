@@ -377,222 +377,125 @@ CHAT_HISTORY_ENDPOINT = "http://localhost:5000/api/chat_history_detail"
 
 
 def process_query_with_mistral(query: str, chat_id: str, chat_context: str, k=10):
+    """
+    Processes a query by generating two separate responses with Mistral:
+    1) A response without using Elasticsearch documents (docless)
+    2) A response with context from Elasticsearch documents (doc-based)
+    Returns both as a single combined answer.
+    """
     logger.info("Processing query started.")
 
-    # Načítame históriu chatu
-    chat_history = ""
-    if chat_context:
-        chat_history = chat_context
-    elif chat_id:
+    # Load chat history
+    chat_history = chat_context or ""
+    if not chat_history and chat_id:
         try:
-            params = {"id": chat_id}
-            r = requests.get(CHAT_HISTORY_ENDPOINT, params=params)
+            r = requests.get(CHAT_HISTORY_ENDPOINT, params={"id": chat_id})
             if r.status_code == 200:
-                data = r.json()
-                chat_data = data.get("chat", "")
-                if isinstance(chat_data, dict):
-                    chat_history = chat_data.get("chat", "")
-                else:
-                    chat_history = chat_data or ""
-                logger.info(f"História chatu načítaná pre chatId: {chat_id}")
-            else:
-                logger.warning(f"Nepodarilo sa načítať históriu (status {r.status_code}) pre chatId: {chat_id}")
+                chat_data = r.json().get("chat", "")
+                chat_history = chat_data if isinstance(chat_data, str) else chat_data.get("chat", "")
+                logger.info(f"Loaded chat history for chatId {chat_id}.")
         except Exception as e:
-            logger.error(f"Chyba pri načítaní histórie: {e}")
+            logger.error(f"Error loading chat history: {e}")
 
+    # Initialize agent and memory
     agent = ConversationalAgent()
     if chat_history:
         agent.load_memory_from_history(chat_history)
-
-    existing_user_data = ""
-    if chat_id:
-        existing_user_data = get_user_data_from_db(chat_id)
-
-    # Ak ide o prvý dopyt v novom chate, uložíme pôvodný dopyt
     if not chat_history.strip():
         agent.update_memory("search_query", query)
 
-    # Aktualizujeme informácie z aktuálneho dopytu
+    # Parse user info and check for missing data
     agent.parse_user_info(query)
     missing_info = agent.analyze_input(query)
-
-    # Ak chýbajú informácie, vraciame výzvu na ich doplnenie
     if missing_info:
-        logger.info(f"Chýbajúce informácie: {missing_info}")
-        combined_missing_text = " ".join(missing_info.values())
+        combined_missing = " ".join(missing_info.values())
         return {
-            "best_answer": combined_missing_text,
+            "best_answer": combined_missing,
             "model": "FollowUp (new chat)",
             "rating": 0,
-            "explanation": "Additional data pre pokračovanie is required.",
+            "explanation": "Additional data required.",
             "patient_data": query
         }
 
-    # Rozpoznáme typ dopytu
+    # Determine query string for LLM
     qtype = classify_query(query, chat_history)
-    logger.info(f"Typ dopytu: {qtype}")
-    logger.info(f"Chat context (snippet): {chat_history[:200]}...")
-
-    # Ak ide o odpoveď na výzvu na doplnenie údajov (update), použijeme pôvodný dopyt
+    original_search = agent.long_term_memory.get("search_query")
     if qtype == "update":
-        original_search = agent.long_term_memory.get("search_query")
-        if not original_search:
-            original_search = extract_last_vyhladavacie_query(chat_history)
-        query_to_use = original_search
+        query_to_use = original_search or extract_last_vyhladavacie_query(chat_history)
     else:
         query_to_use = query
 
-    # Pre upresnenie: kombinujeme pôvodný dopyt a aktuálnu správu
-    if qtype == "upresnenie":
-        original_search = agent.long_term_memory.get("search_query")
-        if not original_search:
-            original_search = extract_last_vyhladavacie_query(chat_history)
-        if original_search is None:
-            original_search = ""
-        combined_query = (original_search + " " + query_to_use).strip()
-        user_data_db = get_user_data_from_db(chat_id)
-        if user_data_db:
-            combined_query += " Udaje cloveka: " + user_data_db
-        logger.info(f"Použitý dopyt pre upresnenie: '{combined_query}'")
+    # 1) Generate docless responses
+    docless_prompt = (
+        f"Otázka: {query_to_use}\n"
+        "Generuj odpoveď bez využitia externých dokumentov."
+    )
+    # Small and large
+    dless_small = llm_small.generate_text(docless_prompt, max_tokens=1200, temperature=0.7)
+    dless_large = llm_large.generate_text(docless_prompt, max_tokens=1200, temperature=0.7)
+    # Validate and evaluate
+    vless_small = validate_answer_logic(query_to_use, dless_small)
+    vless_large = validate_answer_logic(query_to_use, dless_large)
+    oless_small = evaluate_complete_answer(query_to_use, vless_small)
+    oless_large = evaluate_complete_answer(query_to_use, vless_large)
+    # Choose best docless
+    best_docless = max([
+        {"model": "Docless Small", "summary": vless_small, "eval": oless_small},
+        {"model": "Docless Large", "summary": vless_large, "eval": oless_large}
+    ], key=lambda x: x["eval"]["rating"])
 
-        upres_prompt = build_upresnenie_prompt_no_history(chat_history, combined_query)
-        response_str = llm_small.generate_text(upres_prompt, max_tokens=1200, temperature=0.5)
-        normalized = response_str.strip()
-        logger.info(f"Upresnenie prompt response: {normalized}")
-
-        # Vektorové vyhľadávanie pre upresnenie
-        vector_results = vectorstore.similarity_search(combined_query, k=k)
-        max_docs = 5
-        max_len = 1000
-        vector_docs = [
-            getattr(hit, 'page_content', None) or hit.metadata.get('text', '')
-            for hit in vector_results[:max_docs]
-        ]
-        logger.info(
-            f"Vector search in Elasticsearch: Najdených {len(vector_results)} dokumentov pre dopyt: '{combined_query}'")
-        for i, doc in enumerate(vector_docs, start=1):
-            logger.info(f"Vector document {i}: {doc[:200]}")
-
-        # Textové vyhľadávanie
-        es_results = vectorstore.client.search(
-            index=index_name,
-            body={"size": k, "query": {"match": {"text": combined_query}}}
-        )
-        text_docs = [hit['_source'].get('text', '') for hit in es_results['hits']['hits']]
-        logger.info(
-            f"Text search in Elasticsearch: Najdených {len(es_results['hits']['hits'])} dokumentov pre dopyt: '{combined_query}'")
-        for i, doc in enumerate(text_docs, start=1):
-            logger.info(f"Text document {i}: {doc[:200]}")
-
-        # Vytvoríme konečný prompt
-        joined_vector_docs = "\n".join(vector_docs)
-        joined_text_docs = "\n".join(text_docs)
-        final_prompt = (
-            f"Otázka: {combined_query}\n\n"
-            "Informácie z vektorového vyhľadávania:\n"
-            f"{joined_vector_docs}\n\n"
-            "Informácie z textového vyhľadávania:\n"
-            f"{joined_text_docs}\n\n"
-            "Na základe týchto informácií vygeneruj odpoveď, ktorá jasne a logicky reaguje na pôvodný dotaz."
-        )
-        # Ochrana pred príliš dlhým promptom pre mistral-large
-        if len(final_prompt) > 4000:
-            final_prompt = final_prompt[:4000]
-        ans_small = llm_small.generate_text(final_prompt, max_tokens=1200, temperature=0.7)
-        ans_large = llm_large.generate_text(final_prompt, max_tokens=1200, temperature=0.7)
-        val_small = validate_answer_logic(combined_query, ans_small)
-        val_large = validate_answer_logic(combined_query, ans_large)
-        eval_small = evaluate_complete_answer(combined_query, val_small)
-        eval_large = evaluate_complete_answer(combined_query, val_large)
-        candidates = [
-            {"model": "Mistral Small Vector", "summary": val_small, "eval": eval_small},
-            {"model": "Mistral Large Vector", "summary": val_large, "eval": eval_large},
-        ]
-        for candidate in candidates:
-            detailed_desc = generate_detailed_description(combined_query, candidate["summary"],
-                                                          candidate["eval"]["rating"])
-            log_evaluation_to_file(candidate["model"], "vector", candidate["eval"]["rating"], detailed_desc,
-                                   candidate["summary"])
-        best = max(candidates, key=lambda x: x["eval"]["rating"])
-        logger.info(f"Best result from model {best['model']} with rating: {best['eval']['rating']}/10")
-        final_answer = translate_preserving_medicine_names(best["summary"])
-        memory_json = json.dumps(agent.long_term_memory)
-        memory_block = f"[MEMORY]{memory_json}[/MEMORY]"
-        final_answer_with_memory = final_answer + "\n\n" + memory_block
-        return {
-            "best_answer": final_answer_with_memory,
-            "model": best["model"],
-            "rating": best["eval"]["rating"],
-            "explanation": best["eval"]["explanation"]
-        }
-
-    # Vetva pre dopyt typu "vyhladavanie" (použijeme pôvodný dopyt, nie odpoveď na chýbajúce informácie)
+    # 2) Perform Elasticsearch searches (vector + text)
     vector_results = vectorstore.similarity_search(query_to_use, k=k)
-    max_docs = 5
-    max_len = 1000
-    vector_docs = [
-        getattr(hit, 'page_content', None) or hit.metadata.get('text', '')
-        for hit in vector_results[:max_docs]
-    ]
-    if not vector_docs:
-        return {
-            "best_answer": "Ľutujem, nenašli sa žiadne relevantné informácie.",
-            "model": "Vyhladavanie-NoDocs",
-            "rating": 0,
-            "explanation": "No results"
-        }
-    logger.info(
-        f"Vector search in Elasticsearch: Najdených {len(vector_results)} dokumentov pre dopyt: '{query_to_use}'")
-    for i, doc in enumerate(vector_docs, start=1):
-        logger.info(f"Vector document {i}: {doc[:200]}")
-
-    es_results = vectorstore.client.search(
+    vector_docs = [getattr(hit, 'page_content', None) or hit.metadata.get('text', '') for hit in vector_results[:5]]
+    es_hits = vectorstore.client.search(
         index=index_name,
         body={"size": k, "query": {"match": {"text": query_to_use}}}
     )
-    text_docs = [hit['_source'].get('text', '') for hit in es_results['hits']['hits']]
-    logger.info(
-        f"Text search in Elasticsearch: Najdených {len(es_results['hits']['hits'])} dokumentov pre dopyt: '{query_to_use}'")
-    for i, doc in enumerate(text_docs, start=1):
-        logger.info(f"Text document {i}: {doc[:200]}")
+    text_docs = [h['_source'].get('text', '') for h in es_hits['hits']['hits'][:5]]
 
-    joined_vector_docs = "\n".join(vector_docs)
-    joined_text_docs = "\n".join(text_docs)
-    final_prompt = (
+    # Build combined prompt with docs
+    joined_vector = "\n".join(vector_docs)
+    joined_text = "\n".join(text_docs)
+    doc_prompt = (
         f"Otázka: {query_to_use}\n\n"
         "Informácie z vektorového vyhľadávania:\n"
-        f"{joined_vector_docs}\n\n"
+        f"{joined_vector}\n\n"
         "Informácie z textového vyhľadávania:\n"
-        f"{joined_text_docs}\n\n"
+        f"{joined_text}\n\n"
         "Na základe týchto informácií vygeneruj odpoveď, ktorá jasne a logicky reaguje na uvedenú otázku."
     )
-    if len(final_prompt) > 4000:
-        final_prompt = final_prompt[:4000]
-    ans_small = llm_small.generate_text(final_prompt, max_tokens=1200, temperature=0.7)
-    ans_large = llm_large.generate_text(final_prompt, max_tokens=1200, temperature=0.7)
-    val_small = validate_answer_logic(query_to_use, ans_small)
-    val_large = validate_answer_logic(query_to_use, ans_large)
-    eval_small = evaluate_complete_answer(query_to_use, val_small)
-    eval_large = evaluate_complete_answer(query_to_use, val_large)
-    candidates = [
-        {"model": "Mistral Small Text", "summary": val_small, "eval": eval_small},
-        {"model": "Mistral Large Text", "summary": val_large, "eval": eval_large},
-    ]
-    for candidate in candidates:
-        detailed_desc = generate_detailed_description(query_to_use, candidate["summary"], candidate["eval"]["rating"])
-        log_evaluation_to_file(candidate["model"], "text", candidate["eval"]["rating"], detailed_desc,
-                               candidate["summary"])
-    best = max(candidates, key=lambda x: x["eval"]["rating"])
-    logger.info(f"Best result from model {best['model']} with rating: {best['eval']['rating']}/10")
-    final_answer = translate_preserving_medicine_names(best["summary"])
-    memory_json = json.dumps(agent.long_term_memory)
-    memory_block = f"[MEMORY]{memory_json}[/MEMORY]"
-    final_answer_with_memory = final_answer + "\n\n" + memory_block
+    if len(doc_prompt) > 4000:
+        doc_prompt = doc_prompt[:4000]
+
+    # Generate doc-based responses
+    db_small = llm_small.generate_text(doc_prompt, max_tokens=1200, temperature=0.7)
+    db_large = llm_large.generate_text(doc_prompt, max_tokens=1200, temperature=0.7)
+    vdb_small = validate_answer_logic(query_to_use, db_small)
+    vdb_large = validate_answer_logic(query_to_use, db_large)
+    odb_small = evaluate_complete_answer(query_to_use, vdb_small)
+    odb_large = evaluate_complete_answer(query_to_use, vdb_large)
+    # Choose best doc-based
+    best_docbased = max([
+        {"model": "Doc-Based Small", "summary": vdb_small, "eval": odb_small},
+        {"model": "Doc-Based Large", "summary": vdb_large, "eval": odb_large}
+    ], key=lambda x: x["eval"]["rating"])
+
+    # Combine both answers
+    combined_answer = (
+        f"**Odpoveď bez dokumentov ({best_docless['model']}):**\n{best_docless['summary']}\n\n"
+        f"**Odpoveď s dokumentmi ({best_docbased['model']}):**\n{best_docbased['summary']}"
+    )
+
+    # Attach memory block
+    memory_block = f"[MEMORY]{json.dumps(agent.long_term_memory)}[/MEMORY]"
+    final = combined_answer + "\n\n" + memory_block
+
+    # Return unified result
     return {
-        "best_answer": final_answer_with_memory,
-        "model": best["model"],
-        "rating": best["eval"]["rating"],
-        "explanation": best["eval"]["explanation"]
+        "best_answer": final,
+        "model": f"{best_docless['model']} + {best_docbased['model']}",
+        "rating": max(best_docless['eval']["rating"], best_docbased['eval']["rating"]),
+        "explanation": "Combined docless and doc-based responses"
     }
 
 # Koniec kódu
